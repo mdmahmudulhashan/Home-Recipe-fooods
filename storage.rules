@@ -1,0 +1,64 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // 1. Default Deny All Paths (No Insecure Wildcards)
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Role & Department Lookup Helpers via Firestore
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActiveUser() {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        userDoc().status in ['ACTIVE', 'active'];
+    }
+
+    function isSuperAdmin() {
+      return (isSignedIn() && request.auth.token.email_verified == true && request.auth.token.email == 'mdmahmudulhashan0@gmail.com') ||
+        (isActiveUser() && userDoc().role in ['SUPER_ADMIN', 'super_admin']);
+    }
+
+    function isAdminOrSuper() {
+      return isSuperAdmin() || (isActiveUser() && userDoc().role in ['ADMIN', 'admin']);
+    }
+
+    function canManagerAccessEmployee(employeeId) {
+      return isActiveUser() &&
+        userDoc().role in ['MANAGER', 'manager'] &&
+        firestore.exists(/databases/(default)/documents/employees/$(employeeId)) &&
+        firestore.get(/databases/(default)/documents/employees/$(employeeId)).data.departmentId in userDoc().assignedDepartmentIds;
+    }
+
+    function isValidEmployeeId(id) {
+      return id.size() >= 1 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // 3. Employee Profile Photos: employee-photos/{employeeId}/{allPaths=**}
+    match /employee-photos/{employeeId}/{fileName} {
+      allow read: if isValidEmployeeId(employeeId) && (isAdminOrSuper() || canManagerAccessEmployee(employeeId));
+      allow create, update: if isValidEmployeeId(employeeId) &&
+        isAdminOrSuper() &&
+        request.resource.size <= 2 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
+      allow delete: if isValidEmployeeId(employeeId) && isAdminOrSuper();
+    }
+
+    // 4. Employee Official Documents: employee-documents/{employeeId}/{allPaths=**}
+    match /employee-documents/{employeeId}/{fileName} {
+      allow read: if isValidEmployeeId(employeeId) && (isAdminOrSuper() || canManagerAccessEmployee(employeeId));
+      allow create, update: if isValidEmployeeId(employeeId) &&
+        isAdminOrSuper() &&
+        request.resource.size <= 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('(application/pdf|image/jpeg|image/png|image/webp)');
+      allow delete: if isValidEmployeeId(employeeId) && isAdminOrSuper();
+    }
+  }
+}

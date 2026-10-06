@@ -1,0 +1,313 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user account and RBAC role assignment",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "maxLength": 150 },
+        "role": { "type": "string", "enum": ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
+        "assignedDepartmentIds": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role", "status"]
+    },
+    "Role": {
+      "title": "Role",
+      "description": "Application role definition",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 64 },
+        "description": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
+    },
+    "Department": {
+      "title": "Department",
+      "description": "Company department with assigned managers",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 300 },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+        "managerIds": { "type": "string", "maxLength": 1000 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "status"]
+    },
+    "Designation": {
+      "title": "Designation",
+      "description": "Job designation or title",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 300 },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "status"]
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "Employee master record with soft-deletion support",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 120 },
+        "profilePhotoUrl": { "type": "string", "maxLength": 2000 },
+        "mobile": { "type": "string", "maxLength": 40 },
+        "email": { "type": "string", "maxLength": 150 },
+        "nid": { "type": "string", "maxLength": 60 },
+        "dateOfBirth": { "type": "string", "maxLength": 20 },
+        "joiningDate": { "type": "string", "maxLength": 20 },
+        "departmentId": { "type": "number" },
+        "designationId": { "type": "number" },
+        "employmentType": { "type": "string", "maxLength": 40 },
+        "employmentStatus": {
+          "type": "string",
+          "enum": ["Active", "Inactive", "Resigned", "Terminated", "Deleted"]
+        },
+        "basicSalary": { "type": "number" },
+        "salaryType": { "type": "string", "enum": ["Monthly", "Daily"] },
+        "monthlyBonus": { "type": "number" },
+        "currentAddress": { "type": "string", "maxLength": 300 },
+        "permanentAddress": { "type": "string", "maxLength": 300 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "employeeId",
+        "name",
+        "mobile",
+        "joiningDate",
+        "departmentId",
+        "designationId",
+        "employmentStatus"
+      ]
+    },
+    "Leave": {
+      "title": "Leave",
+      "description": "Employee leave record separate from absence",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "number" },
+        "departmentId": { "type": "number" },
+        "leaveType": { "type": "string", "maxLength": 40 },
+        "isPaid": { "type": "boolean" },
+        "startDate": { "type": "string", "maxLength": 20 },
+        "endDate": { "type": "string", "maxLength": 20 },
+        "totalDays": { "type": "number" },
+        "reason": { "type": "string", "maxLength": 400 },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Rejected"] },
+        "addedBy": { "type": "string", "maxLength": 120 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "departmentId", "leaveType", "startDate", "endDate", "totalDays", "status"]
+    },
+    "Absence": {
+      "title": "Absence",
+      "description": "Employee daily absence record",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "number" },
+        "departmentId": { "type": "number" },
+        "date": { "type": "string", "maxLength": 20 },
+        "reason": { "type": "string", "maxLength": 400 },
+        "addedBy": { "type": "string", "maxLength": 120 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "departmentId", "date", "reason"]
+    },
+    "SnackPurchase": {
+      "title": "SnackPurchase",
+      "description": "Employee snack purchase deduction record",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "number" },
+        "departmentId": { "type": "number" },
+        "date": { "type": "string", "maxLength": 20 },
+        "item": { "type": "string", "maxLength": 200 },
+        "quantity": { "type": "number" },
+        "amount": { "type": "number" },
+        "remarks": { "type": "string", "maxLength": 300 },
+        "addedBy": { "type": "string", "maxLength": 120 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "departmentId", "date", "item", "quantity", "amount"]
+    },
+    "Advance": {
+      "title": "Advance",
+      "description": "Employee salary advance record",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "number" },
+        "departmentId": { "type": "number" },
+        "date": { "type": "string", "maxLength": 20 },
+        "amount": { "type": "number" },
+        "reason": { "type": "string", "maxLength": 300 },
+        "remarks": { "type": "string", "maxLength": 300 },
+        "addedBy": { "type": "string", "maxLength": 120 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "departmentId", "date", "amount", "reason"]
+    },
+    "SalarySheet": {
+      "title": "SalarySheet",
+      "description": "Monthly finalized salary sheet metadata",
+      "type": "object",
+      "properties": {
+        "month": { "type": "number" },
+        "year": { "type": "number" },
+        "departmentId": { "type": "number" },
+        "totalEmployees": { "type": "number" },
+        "totalPayableSalary": { "type": "number" },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["month", "year", "totalEmployees", "totalPayableSalary"]
+    },
+    "SalaryRecord": {
+      "title": "SalaryRecord",
+      "description": "Individual employee monthly salary calculation record",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "number" },
+        "departmentId": { "type": "number" },
+        "month": { "type": "number" },
+        "year": { "type": "number" },
+        "basicSalary": { "type": "number" },
+        "dailySalary": { "type": "number" },
+        "regularPaidDays": { "type": "number" },
+        "fridayOvertimeDays": { "type": "number" },
+        "totalDays": { "type": "number" },
+        "overtimePay": { "type": "number" },
+        "monthlyBonus": { "type": "number" },
+        "grossSalary": { "type": "number" },
+        "totalAdvance": { "type": "number" },
+        "totalSnack": { "type": "number" },
+        "payableSalary": { "type": "number" },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "departmentId", "month", "year", "payableSalary"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Immutable system audit log record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 120 },
+        "role": { "type": "string", "maxLength": 40 },
+        "action": { "type": "string", "maxLength": 200 },
+        "module": { "type": "string", "maxLength": 80 },
+        "recordId": { "type": "string", "maxLength": 120 },
+        "employeeId": { "type": "string", "maxLength": 64 },
+        "previousValue": { "type": "string", "maxLength": 2000 },
+        "newValue": { "type": "string", "maxLength": 2000 },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "role", "action", "module", "timestamp"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Company and salary calculation settings",
+      "type": "object",
+      "properties": {
+        "companyName": { "type": "string", "maxLength": 150 },
+        "companyAddress": { "type": "string", "maxLength": 250 },
+        "companyPhone": { "type": "string", "maxLength": 60 },
+        "companyEmail": { "type": "string", "maxLength": 150 },
+        "standardMonthDays": { "type": "number" },
+        "fridayOvertimeEnabled": { "type": "boolean" },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyName", "companyAddress", "standardMonthDays"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles and RBAC roles"
+    },
+    "/roles/{roleId}": {
+      "schema": { "$ref": "#/entities/Role" },
+      "description": "System role definitions"
+    },
+    "/departments/{departmentId}": {
+      "schema": { "$ref": "#/entities/Department" },
+      "description": "Company departments"
+    },
+    "/designations/{designationId}": {
+      "schema": { "$ref": "#/entities/Designation" },
+      "description": "Employee designations"
+    },
+    "/employees/{employeeDocId}": {
+      "schema": { "$ref": "#/entities/Employee" },
+      "description": "Employee master records"
+    },
+    "/leaves/{leaveId}": {
+      "schema": { "$ref": "#/entities/Leave" },
+      "description": "Approved and pending leave records"
+    },
+    "/absences/{absenceId}": {
+      "schema": { "$ref": "#/entities/Absence" },
+      "description": "Employee daily absence records"
+    },
+    "/snack_purchases/{snackId}": {
+      "schema": { "$ref": "#/entities/SnackPurchase" },
+      "description": "Employee snack purchase records"
+    },
+    "/advances/{advanceId}": {
+      "schema": { "$ref": "#/entities/Advance" },
+      "description": "Employee salary advance records"
+    },
+    "/salary_sheets/{sheetId}": {
+      "schema": { "$ref": "#/entities/SalarySheet" },
+      "description": "Monthly salary sheet summaries"
+    },
+    "/salary_records/{recordId}": {
+      "schema": { "$ref": "#/entities/SalaryRecord" },
+      "description": "Individual monthly salary calculation records"
+    },
+    "/activity_logs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Immutable audit logs"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/Settings" },
+      "description": "Global company and salary settings"
+    }
+  }
+}

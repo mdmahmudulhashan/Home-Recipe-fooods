@@ -1,0 +1,598 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default Deny — Zero Insecure Wildcards)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Primitives & Server-Side Role Resolution
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedSuperAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'mdmahmudulhashan0@gmail.com';
+    }
+
+    function userDocPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasActiveUserDoc() {
+      return isSignedIn() &&
+        exists(userDocPath()) &&
+        get(userDocPath()).data.status in ['ACTIVE', 'active'];
+    }
+
+    // Role is determined strictly from the server-side /users/{uid} document
+    // Supports both canonical uppercase ('SUPER_ADMIN', 'ADMIN', 'MANAGER')
+    // and lowercase ('super_admin', 'admin', 'manager')
+    function isSuperAdmin() {
+      return isBootstrappedSuperAdmin() ||
+        (hasActiveUserDoc() && get(userDocPath()).data.role in ['SUPER_ADMIN', 'super_admin']);
+    }
+
+    function isAdmin() {
+      return hasActiveUserDoc() && get(userDocPath()).data.role in ['ADMIN', 'admin'];
+    }
+
+    function isAdminOrSuper() {
+      return isSuperAdmin() || isAdmin();
+    }
+
+    function isManagerForDept(deptId) {
+      return hasActiveUserDoc() &&
+        get(userDocPath()).data.role in ['MANAGER', 'manager'] &&
+        deptId in get(userDocPath()).data.assignedDepartmentIds;
+    }
+
+    function isTargetSuperAdmin(targetRole) {
+      return targetRole in ['SUPER_ADMIN', 'super_admin'];
+    }
+
+    // 3. Entity Validation Blueprints (Anti-Update-Gap & Schema Enforcement)
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'role', 'assignedDepartmentIds', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'name', 'email', 'role', 'assignedDepartmentIds', 'status', 'createdAt', 'updatedAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+        data.role is string && data.role in ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'super_admin', 'admin', 'manager'] &&
+        data.assignedDepartmentIds is list && data.assignedDepartmentIds.size() <= 50 &&
+        (data.assignedDepartmentIds.size() == 0 || data.assignedDepartmentIds[0] is int) &&
+        data.status is string && data.status in ['ACTIVE', 'INACTIVE', 'active', 'inactive'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidRole(data) {
+      return data.keys().hasAll(['name', 'description', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['name', 'description', 'createdAt', 'updatedAt']) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 64 &&
+        data.description is string && data.description.size() <= 300 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidDepartment(data) {
+      return data.keys().hasAll(['name', 'description', 'status', 'managerIds', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['name', 'description', 'status', 'managerIds', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt']) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.description is string && data.description.size() <= 300 &&
+        data.status is string && data.status in ['ACTIVE', 'INACTIVE', 'active', 'inactive'] &&
+        data.managerIds is list && data.managerIds.size() <= 50 &&
+        (data.managerIds.size() == 0 || data.managerIds[0] is string) &&
+        data.createdBy is string && data.createdBy.size() <= 128 &&
+        data.updatedBy is string && data.updatedBy.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidDesignation(data) {
+      return data.keys().hasAll(['name', 'description', 'status', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['name', 'description', 'status', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt']) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.description is string && data.description.size() <= 300 &&
+        data.status is string && data.status in ['ACTIVE', 'INACTIVE', 'active', 'inactive'] &&
+        data.createdBy is string && data.createdBy.size() <= 128 &&
+        data.updatedBy is string && data.updatedBy.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidEmployee(data) {
+      return data.keys().hasAll([
+          'employeeId', 'name', 'profilePhotoUrl', 'mobile', 'email', 'nid',
+          'dateOfBirth', 'joiningDate', 'departmentId', 'designationId',
+          'employmentType', 'employmentStatus', 'basicSalary', 'salaryType',
+          'monthlyBonus', 'currentAddress', 'permanentAddress',
+          'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'employeeId', 'name', 'profilePhotoUrl', 'mobile', 'email', 'nid',
+          'dateOfBirth', 'joiningDate', 'departmentId', 'designationId',
+          'employmentType', 'employmentStatus', 'basicSalary', 'salaryType',
+          'monthlyBonus', 'currentAddress', 'permanentAddress',
+          'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.employeeId is string && data.employeeId.size() >= 1 && data.employeeId.size() <= 64 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.profilePhotoUrl is string && data.profilePhotoUrl.size() <= 2000 &&
+        data.mobile is string && data.mobile.size() >= 3 && data.mobile.size() <= 40 &&
+        data.email is string && data.email.size() <= 150 &&
+        data.nid is string && data.nid.size() <= 60 &&
+        data.dateOfBirth is string && data.dateOfBirth.size() <= 20 &&
+        data.joiningDate is string && data.joiningDate.size() >= 4 && data.joiningDate.size() <= 20 &&
+        data.departmentId is int &&
+        data.designationId is int &&
+        data.employmentType is string && data.employmentType.size() <= 40 &&
+        data.employmentStatus is string && data.employmentStatus in ['Active', 'Inactive', 'Resigned', 'Terminated', 'Deleted'] &&
+        data.basicSalary is number && data.basicSalary >= 0 &&
+        data.salaryType is string && data.salaryType in ['Monthly', 'Daily'] &&
+        data.monthlyBonus is number && data.monthlyBonus >= 0 &&
+        data.currentAddress is string && data.currentAddress.size() <= 300 &&
+        data.permanentAddress is string && data.permanentAddress.size() <= 300 &&
+        data.createdBy is string && data.createdBy.size() <= 128 &&
+        data.updatedBy is string && data.updatedBy.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidLeave(data) {
+      return data.keys().hasAll([
+          'employeeId', 'departmentId', 'leaveType', 'isPaid', 'startDate',
+          'endDate', 'totalDays', 'reason', 'status', 'addedBy',
+          'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'employeeId', 'departmentId', 'leaveType', 'isPaid', 'startDate',
+          'endDate', 'totalDays', 'reason', 'status', 'addedBy',
+          'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.employeeId is int &&
+        data.departmentId is int &&
+        data.leaveType is string && data.leaveType.size() >= 1 && data.leaveType.size() <= 40 &&
+        data.isPaid is bool &&
+        data.startDate is string && data.startDate.size() >= 4 && data.startDate.size() <= 20 &&
+        data.endDate is string && data.endDate.size() >= 4 && data.endDate.size() <= 20 &&
+        data.totalDays is int && data.totalDays >= 1 && data.totalDays <= 366 &&
+        data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 400 &&
+        data.status is string && data.status in ['Pending', 'Approved', 'Rejected'] &&
+        data.addedBy is string && data.addedBy.size() <= 120 &&
+        data.createdBy is string && data.createdBy.size() <= 128 &&
+        data.updatedBy is string && data.updatedBy.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAbsence(data) {
+      return data.keys().hasAll([
+          'employeeId', 'departmentId', 'date', 'reason', 'addedBy',
+          'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'employeeId', 'departmentId', 'date', 'reason', 'addedBy',
+          'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.employeeId is int &&
+        data.departmentId is int &&
+        data.date is string && data.date.size() >= 4 && data.date.size() <= 20 &&
+        data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 400 &&
+        data.addedBy is string && data.addedBy.size() <= 120 &&
+        data.createdBy is string && data.createdBy.size() <= 128 &&
+        data.updatedBy is string && data.updatedBy.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSnackPurchase(data) {
+      return data.keys().hasAll([
+          'employeeId', 'departmentId', 'date', 'item', 'quantity', 'amount',
+          'remarks', 'addedBy', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'employeeId', 'departmentId', 'date', 'item', 'quantity', 'amount',
+          'remarks', 'addedBy', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.employeeId is int &&
+        data.departmentId is int &&
+        data.date is string && data.date.size() >= 4 && data.date.size() <= 20 &&
+        data.item is string && data.item.size() >= 1 && data.item.size() <= 200 &&
+        data.quantity is int && data.quantity >= 1 &&
+        data.amount is number && data.amount > 0 &&
+        data.remarks is string && data.remarks.size() <= 300 &&
+        data.addedBy is string && data.addedBy.size() <= 120 &&
+        data.createdBy is string && data.createdBy.size() <= 128 &&
+        data.updatedBy is string && data.updatedBy.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdvance(data) {
+      return data.keys().hasAll([
+          'employeeId', 'departmentId', 'date', 'amount', 'reason',
+          'remarks', 'addedBy', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'employeeId', 'departmentId', 'date', 'amount', 'reason',
+          'remarks', 'addedBy', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.employeeId is int &&
+        data.departmentId is int &&
+        data.date is string && data.date.size() >= 4 && data.date.size() <= 20 &&
+        data.amount is number && data.amount > 0 &&
+        data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 300 &&
+        data.remarks is string && data.remarks.size() <= 300 &&
+        data.addedBy is string && data.addedBy.size() <= 120 &&
+        data.createdBy is string && data.createdBy.size() <= 128 &&
+        data.updatedBy is string && data.updatedBy.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSalarySheet(data) {
+      return data.keys().hasAll([
+          'month', 'year', 'departmentId', 'totalEmployees', 'totalPayableSalary',
+          'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'month', 'year', 'departmentId', 'totalEmployees', 'totalPayableSalary',
+          'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.month is int && data.month >= 1 && data.month <= 12 &&
+        data.year is int && data.year >= 2020 && data.year <= 2100 &&
+        data.departmentId is int &&
+        data.totalEmployees is int && data.totalEmployees >= 0 &&
+        data.totalPayableSalary is number &&
+        data.createdBy is string && data.createdBy.size() <= 128 &&
+        data.updatedBy is string && data.updatedBy.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSalaryRecord(data) {
+      return data.keys().hasAll([
+          'employeeId', 'departmentId', 'month', 'year', 'basicSalary',
+          'dailySalary', 'regularPaidDays', 'fridayOvertimeDays', 'totalDays',
+          'overtimePay', 'monthlyBonus', 'grossSalary', 'totalAdvance',
+          'totalSnack', 'payableSalary', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'employeeId', 'departmentId', 'month', 'year', 'basicSalary',
+          'dailySalary', 'regularPaidDays', 'fridayOvertimeDays', 'totalDays',
+          'overtimePay', 'monthlyBonus', 'grossSalary', 'totalAdvance',
+          'totalSnack', 'payableSalary', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.employeeId is int &&
+        data.departmentId is int &&
+        data.month is int && data.month >= 1 && data.month <= 12 &&
+        data.year is int && data.year >= 2020 && data.year <= 2100 &&
+        data.basicSalary is number &&
+        data.dailySalary is number &&
+        data.regularPaidDays is int &&
+        data.fridayOvertimeDays is int &&
+        data.totalDays is int &&
+        data.overtimePay is number &&
+        data.monthlyBonus is number &&
+        data.grossSalary is number &&
+        data.totalAdvance is number &&
+        data.totalSnack is number &&
+        data.payableSalary is number &&
+        data.createdBy is string && data.createdBy.size() <= 128 &&
+        data.updatedBy is string && data.updatedBy.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidActivityLog(data) {
+      return data.keys().hasAll([
+          'userId', 'userName', 'role', 'action', 'module',
+          'recordId', 'employeeId', 'previousValue', 'newValue', 'timestamp'
+        ]) &&
+        data.keys().hasOnly([
+          'userId', 'userName', 'role', 'action', 'module',
+          'recordId', 'employeeId', 'previousValue', 'newValue', 'timestamp'
+        ]) &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 120 &&
+        data.role is string && data.role.size() >= 1 && data.role.size() <= 40 &&
+        data.action is string && data.action.size() >= 1 && data.action.size() <= 200 &&
+        data.module is string && data.module.size() >= 1 && data.module.size() <= 80 &&
+        data.recordId is string && data.recordId.size() <= 120 &&
+        data.employeeId is string && data.employeeId.size() <= 64 &&
+        data.previousValue is string && data.previousValue.size() <= 2000 &&
+        data.newValue is string && data.newValue.size() <= 2000 &&
+        data.timestamp is timestamp;
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasAll([
+          'companyName', 'companyAddress', 'companyPhone', 'companyEmail',
+          'standardMonthDays', 'fridayOvertimeEnabled', 'updatedBy', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'companyName', 'companyAddress', 'companyPhone', 'companyEmail',
+          'standardMonthDays', 'fridayOvertimeEnabled', 'updatedBy', 'updatedAt'
+        ]) &&
+        data.companyName is string && data.companyName.size() >= 1 && data.companyName.size() <= 150 &&
+        data.companyAddress is string && data.companyAddress.size() >= 1 && data.companyAddress.size() <= 250 &&
+        data.companyPhone is string && data.companyPhone.size() <= 60 &&
+        data.companyEmail is string && data.companyEmail.size() <= 150 &&
+        data.standardMonthDays is int && data.standardMonthDays >= 28 && data.standardMonthDays <= 31 &&
+        data.fridayOvertimeEnabled is bool &&
+        data.updatedBy is string && data.updatedBy.size() <= 128 &&
+        data.updatedAt is timestamp;
+    }
+
+    // =========================================================================
+    // COLLECTION 1: /users/{userId}
+    // Prevents privilege escalation, Manager self-role/dept change, and Admin modifying Super Admin
+    // =========================================================================
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isSuperAdmin());
+      allow list: if isSignedIn() && (existing().uid == request.auth.uid || isSuperAdmin());
+      allow create: if isVerifiedUser() && isValidId(userId) && isValidUser(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isSuperAdmin();
+      allow update: if isVerifiedUser() && isValidId(userId) && isValidUser(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isSuperAdmin() ||
+          (
+            request.auth.uid == userId &&
+            !isTargetSuperAdmin(existing().role) &&
+            incoming().role == existing().role &&
+            incoming().assignedDepartmentIds == existing().assignedDepartmentIds &&
+            incoming().status == existing().status &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'updatedAt'])
+          )
+        );
+      allow delete: if isVerifiedUser() && isValidId(userId) && isSuperAdmin() && !isTargetSuperAdmin(existing().role);
+    }
+
+    // =========================================================================
+    // COLLECTION 2: /roles/{roleId}
+    // =========================================================================
+    match /roles/{roleId} {
+      allow get: if isSignedIn() && isValidId(roleId) && isSuperAdmin();
+      allow list: if isSignedIn() && existing().name in ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'super_admin', 'admin', 'manager'] && isSuperAdmin();
+      allow create: if isVerifiedUser() && isValidId(roleId) && isValidRole(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isSuperAdmin();
+      allow update: if isVerifiedUser() && isValidId(roleId) && isValidRole(incoming()) &&
+        incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['description', 'updatedAt']) &&
+        isSuperAdmin();
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // COLLECTION 3: /departments/{departmentId}
+    // =========================================================================
+    match /departments/{departmentId} {
+      allow get: if isSignedIn() && isValidId(departmentId) && (isAdminOrSuper() || request.auth.uid in existing().managerIds);
+      allow list: if isSignedIn() && (existing().status in ['ACTIVE', 'INACTIVE', 'active', 'inactive']) && (isAdminOrSuper() || request.auth.uid in existing().managerIds);
+      allow create: if isVerifiedUser() && isValidId(departmentId) && isValidDepartment(incoming()) &&
+        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdminOrSuper();
+      allow update: if isVerifiedUser() && isValidId(departmentId) && isValidDepartment(incoming()) &&
+        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
+        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'status', 'managerIds', 'updatedBy', 'updatedAt']) &&
+        isAdminOrSuper();
+      allow delete: if isVerifiedUser() && isValidId(departmentId) && isAdminOrSuper();
+    }
+
+    // =========================================================================
+    // COLLECTION 4: /designations/{designationId}
+    // =========================================================================
+    match /designations/{designationId} {
+      allow get: if isSignedIn() && isValidId(designationId) && isAdminOrSuper();
+      allow list: if isSignedIn() && (existing().status in ['ACTIVE', 'INACTIVE', 'active', 'inactive']) && isAdminOrSuper();
+      allow create: if isVerifiedUser() && isValidId(designationId) && isValidDesignation(incoming()) &&
+        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdminOrSuper();
+      allow update: if isVerifiedUser() && isValidId(designationId) && isValidDesignation(incoming()) &&
+        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
+        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'status', 'updatedBy', 'updatedAt']) &&
+        isAdminOrSuper();
+      allow delete: if isVerifiedUser() && isValidId(designationId) && isAdminOrSuper();
+    }
+
+    // =========================================================================
+    // COLLECTION 5: /employees/{employeeDocId}
+    // =========================================================================
+    match /employees/{employeeDocId} {
+      allow get: if isSignedIn() && isValidId(employeeDocId) && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
+      allow list: if isSignedIn() && existing().departmentId is int && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
+      allow create: if isVerifiedUser() && isValidId(employeeDocId) && isValidEmployee(incoming()) &&
+        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdminOrSuper();
+      allow update: if isVerifiedUser() && isValidId(employeeDocId) && isValidEmployee(incoming()) &&
+        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
+        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'employeeId', 'name', 'profilePhotoUrl', 'mobile', 'email', 'nid',
+          'dateOfBirth', 'joiningDate', 'departmentId', 'designationId',
+          'employmentType', 'employmentStatus', 'basicSalary', 'salaryType',
+          'monthlyBonus', 'currentAddress', 'permanentAddress', 'updatedBy', 'updatedAt'
+        ]) &&
+        isAdminOrSuper();
+      allow delete: if isVerifiedUser() && isValidId(employeeDocId) && isSuperAdmin();
+    }
+
+    // =========================================================================
+    // COLLECTION 6: /leaves/{leaveId}
+    // =========================================================================
+    match /leaves/{leaveId} {
+      allow get: if isSignedIn() && isValidId(leaveId) && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
+      allow list: if isSignedIn() && existing().departmentId is int && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
+      allow create: if isVerifiedUser() && isValidId(leaveId) && isValidLeave(incoming()) &&
+        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdminOrSuper();
+      allow update: if isVerifiedUser() && isValidId(leaveId) && isValidLeave(incoming()) &&
+        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
+        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'leaveType', 'isPaid', 'startDate', 'endDate', 'totalDays', 'reason', 'status', 'updatedBy', 'updatedAt'
+        ]) &&
+        isAdminOrSuper();
+      allow delete: if isVerifiedUser() && isValidId(leaveId) && isAdminOrSuper();
+    }
+
+    // =========================================================================
+    // COLLECTION 7: /absences/{absenceId}
+    // Managers can create absence records ONLY for their assigned departments
+    // =========================================================================
+    match /absences/{absenceId} {
+      allow get: if isSignedIn() && isValidId(absenceId) && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
+      allow list: if isSignedIn() && existing().departmentId is int && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
+      allow create: if isVerifiedUser() && isValidId(absenceId) && isValidAbsence(incoming()) &&
+        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        (isAdminOrSuper() || isManagerForDept(incoming().departmentId));
+      allow update: if isVerifiedUser() && isValidId(absenceId) && isValidAbsence(incoming()) &&
+        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
+        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['date', 'reason', 'updatedBy', 'updatedAt']) &&
+        isAdminOrSuper();
+      allow delete: if isVerifiedUser() && isValidId(absenceId) && isAdminOrSuper();
+    }
+
+    // =========================================================================
+    // COLLECTION 8: /snack_purchases/{snackId} (Strictly Forbidden for Managers)
+    // =========================================================================
+    match /snack_purchases/{snackId} {
+      allow get: if isSignedIn() && isValidId(snackId) && isAdminOrSuper();
+      allow list: if isSignedIn() && existing().amount > 0 && isAdminOrSuper();
+      allow create: if isVerifiedUser() && isValidId(snackId) && isValidSnackPurchase(incoming()) &&
+        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdminOrSuper();
+      allow update: if isVerifiedUser() && isValidId(snackId) && isValidSnackPurchase(incoming()) &&
+        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
+        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['date', 'item', 'quantity', 'amount', 'remarks', 'updatedBy', 'updatedAt']) &&
+        isAdminOrSuper();
+      allow delete: if isVerifiedUser() && isValidId(snackId) && isAdminOrSuper();
+    }
+
+    // =========================================================================
+    // COLLECTION 9: /advances/{advanceId} (Strictly Forbidden for Managers)
+    // =========================================================================
+    match /advances/{advanceId} {
+      allow get: if isSignedIn() && isValidId(advanceId) && isAdminOrSuper();
+      allow list: if isSignedIn() && existing().amount > 0 && isAdminOrSuper();
+      allow create: if isVerifiedUser() && isValidId(advanceId) && isValidAdvance(incoming()) &&
+        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdminOrSuper();
+      allow update: if isVerifiedUser() && isValidId(advanceId) && isValidAdvance(incoming()) &&
+        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
+        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['date', 'amount', 'reason', 'remarks', 'updatedBy', 'updatedAt']) &&
+        isAdminOrSuper();
+      allow delete: if isVerifiedUser() && isValidId(advanceId) && isAdminOrSuper();
+    }
+
+    // =========================================================================
+    // COLLECTION 10: /salary_sheets/{sheetId} (Strictly Forbidden for Managers)
+    // =========================================================================
+    match /salary_sheets/{sheetId} {
+      allow get: if isSignedIn() && isValidId(sheetId) && isAdminOrSuper();
+      allow list: if isSignedIn() && existing().year >= 2020 && isAdminOrSuper();
+      allow create: if isVerifiedUser() && isValidId(sheetId) && isValidSalarySheet(incoming()) &&
+        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdminOrSuper();
+      allow update: if isVerifiedUser() && isValidId(sheetId) && isValidSalarySheet(incoming()) &&
+        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
+        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['totalEmployees', 'totalPayableSalary', 'updatedBy', 'updatedAt']) &&
+        isAdminOrSuper();
+      allow delete: if isVerifiedUser() && isValidId(sheetId) && isSuperAdmin();
+    }
+
+    // =========================================================================
+    // COLLECTION 11: /salary_records/{recordId} (Strictly Forbidden for Managers)
+    // =========================================================================
+    match /salary_records/{recordId} {
+      allow get: if isSignedIn() && isValidId(recordId) && isAdminOrSuper();
+      allow list: if isSignedIn() && existing().year >= 2020 && isAdminOrSuper();
+      allow create: if isVerifiedUser() && isValidId(recordId) && isValidSalaryRecord(incoming()) &&
+        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdminOrSuper();
+      allow update: if isVerifiedUser() && isValidId(recordId) && isValidSalaryRecord(incoming()) &&
+        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
+        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'basicSalary', 'dailySalary', 'regularPaidDays', 'fridayOvertimeDays',
+          'totalDays', 'overtimePay', 'monthlyBonus', 'grossSalary',
+          'totalAdvance', 'totalSnack', 'payableSalary', 'updatedBy', 'updatedAt'
+        ]) &&
+        isAdminOrSuper();
+      allow delete: if isVerifiedUser() && isValidId(recordId) && isSuperAdmin();
+    }
+
+    // =========================================================================
+    // COLLECTION 12: /activity_logs/{logId} (Immutable Audit Trail — Super Admin Read Only)
+    // =========================================================================
+    match /activity_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && isSuperAdmin();
+      allow list: if isSignedIn() && existing().userId is string && isSuperAdmin();
+      allow create: if isVerifiedUser() && isValidId(logId) && isValidActivityLog(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        incoming().timestamp == request.time &&
+        hasActiveUserDoc();
+      allow update, delete: if false;
+    }
+
+    // =========================================================================
+    // COLLECTION 13: /settings/{settingId} (Super Admin Only Writes, Blocked for Managers)
+    // =========================================================================
+    match /settings/{settingId} {
+      allow get: if isSignedIn() && isValidId(settingId) && isAdminOrSuper();
+      allow list: if isSignedIn() && existing().standardMonthDays >= 28 && isAdminOrSuper();
+      allow create: if isVerifiedUser() && isValidId(settingId) && isValidSettings(incoming()) &&
+        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
+        isSuperAdmin();
+      allow update: if isVerifiedUser() && isValidId(settingId) && isValidSettings(incoming()) &&
+        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'companyName', 'companyAddress', 'companyPhone', 'companyEmail',
+          'standardMonthDays', 'fridayOvertimeEnabled', 'updatedBy', 'updatedAt'
+        ]) &&
+        isSuperAdmin();
+      allow delete: if false;
+    }
+
+    // Connection validation probe path
+    match /test/connection {
+      allow get: if isSignedIn();
+    }
+  }
+}
