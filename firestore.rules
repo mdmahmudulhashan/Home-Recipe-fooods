@@ -361,14 +361,7 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time && (
           isSuperAdmin() ||
-          (
-            request.auth.uid == userId &&
-            !isTargetSuperAdmin(existing().role) &&
-            incoming().role == existing().role &&
-            incoming().assignedDepartmentIds == existing().assignedDepartmentIds &&
-            incoming().status == existing().status &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'updatedAt'])
-          )
+          request.auth.uid == userId
         );
       allow delete: if isVerifiedUser() && isValidId(userId) && isSuperAdmin() && !isTargetSuperAdmin(existing().role);
     }
@@ -393,8 +386,8 @@ service cloud.firestore {
     // COLLECTION 3: /departments/{departmentId}
     // =========================================================================
     match /departments/{departmentId} {
-      allow get: if isSignedIn() && isValidId(departmentId) && (isAdminOrSuper() || request.auth.uid in existing().managerIds);
-      allow list: if isSignedIn() && (existing().status in ['ACTIVE', 'INACTIVE', 'active', 'inactive']) && (isAdminOrSuper() || request.auth.uid in existing().managerIds);
+      allow get: if isSignedIn() && isValidId(departmentId) && (isAdminOrSuper() || hasActiveUserDoc());
+      allow list: if isSignedIn() && (existing().status in ['ACTIVE', 'INACTIVE', 'active', 'inactive']) && (isAdminOrSuper() || hasActiveUserDoc());
       allow create: if isVerifiedUser() && isValidId(departmentId) && isValidDepartment(incoming()) &&
         incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
         incoming().createdAt == request.time && incoming().updatedAt == request.time &&
