@@ -335,7 +335,7 @@ service cloud.firestore {
       allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
       allow create: if hasValidSession() && isValidId(userId) && isValidUser(incoming());
       allow update: if hasValidSession() && isValidId(userId) && isValidUser(incoming());
-      allow delete: if hasValidSession() && isValidId(userId) && isSuperAdmin() && !isTargetSuperAdmin(existing().role);
+      allow delete: if hasValidSession() && isValidId(userId) && isSuperAdmin();
     }
 
     // =========================================================================

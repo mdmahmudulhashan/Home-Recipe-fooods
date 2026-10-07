@@ -399,6 +399,27 @@ export async function ensureFirestoreUserAndSeed(overrideEmail?: string): Promis
         }
       }
 
+      const usersSnap = await getDocs(collection(firestoreDb, 'users'));
+      if (usersSnap.size <= 1) {
+        for (const [accEmail, acc] of Object.entries(KNOWN_ACCOUNTS)) {
+          const accDocRef = doc(firestoreDb, 'users', `user_${acc.id}`);
+          const accSnap = await getDoc(accDocRef);
+          if (!accSnap.exists()) {
+            await setDoc(accDocRef, {
+              uid: `user_${acc.id}`,
+              name: acc.name,
+              email: accEmail,
+              role: acc.role,
+              assignedDepartmentIds: acc.assignedDepartmentIds,
+              status: 'ACTIVE',
+              passwordHint: '123456',
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+          }
+        }
+      }
+
       if (userRole === 'SUPER_ADMIN') {
         const settingsRef = doc(firestoreDb, 'settings', 'company_config');
         const settingsSnap = await getDoc(settingsRef);
@@ -1955,30 +1976,10 @@ export async function handleStandaloneApiRequest(
       };
     });
 
-    // Ensure the 3 core role accounts are always visible in the list and deduplicate by email
     const byEmail = new Map<string, any>();
     for (const u of rawUsers) {
-      if (u.email) {
-        byEmail.set(u.email, u);
-      }
-    }
-    for (const [knownEmail, acc] of Object.entries(KNOWN_ACCOUNTS)) {
-      if (!byEmail.has(knownEmail)) {
-        byEmail.set(knownEmail, {
-          id: acc.id,
-          docId: `user_${acc.id}`,
-          uid: `user_${acc.id}`,
-          name: acc.name,
-          email: knownEmail,
-          role: acc.role,
-          assignedDepartmentIds: acc.assignedDepartmentIds,
-          assignedDepartmentNames: acc.assignedDepartmentIds
-            .map((id: number) => deptMap[id])
-            .filter(Boolean),
-          status: 'ACTIVE',
-          createdAt: new Date().toISOString(),
-        });
-      }
+      const key = u.email || u.docId;
+      byEmail.set(key, u);
     }
     const usersList = ensureUniqueNumericIds(Array.from(byEmail.values()));
 
@@ -2008,6 +2009,14 @@ export async function handleStandaloneApiRequest(
       };
 
       await setDoc(docRef, payload);
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'নতুন ইউজার তৈরি করেছেন',
+        module: 'ইউজার পারমিশন',
+        recordId: docId,
+        newValue: `${payload.name} (${payload.email})`,
+      });
 
       return { id: nextId, ...payload };
     }
@@ -2052,7 +2061,46 @@ export async function handleStandaloneApiRequest(
 
       await setDoc(docRef, payload);
 
+      await writeActivityLog({
+        user: currentUser,
+        action: 'ইউজার পারমিশন আপডেট করেছেন',
+        module: 'ইউজার পারমিশন',
+        recordId: docId,
+        newValue: `${payload.name} (${payload.role})`,
+      });
+
       return { id, ...payload };
+    }
+
+    if (method === 'DELETE') {
+      if (currentUser.role !== 'SUPER_ADMIN') {
+        throw new Error('শুধুমাত্র সুপার অ্যাডমিন ইউজার মুছে ফেলতে পারবেন।');
+      }
+      const targetEmail = String(existingData.email || '').toLowerCase();
+      if (targetEmail && targetEmail === currentUser.email.toLowerCase()) {
+        throw new Error('আপনি নিজের লগইনকৃত সুপার অ্যাডমিন অ্যাকাউন্ট মুছে ফেলতে পারবেন না।');
+      }
+
+      // Delete all matching user documents (by docId and by email if duplicated)
+      await deleteDoc(docRef);
+      if (targetEmail) {
+        const dupSnap = await getDocs(
+          query(collection(firestoreDb, 'users'), where('email', '==', targetEmail))
+        );
+        for (const dupDoc of dupSnap.docs) {
+          await deleteDoc(doc(firestoreDb, 'users', dupDoc.id));
+        }
+      }
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'ইউজার মুছে ফেলেছেন',
+        module: 'ইউজার পারমিশন',
+        recordId: docId,
+        previousValue: `${existingData.name || ''} (${targetEmail || docId})`,
+      });
+
+      return { message: 'ব্যবহারকারী সফলভাবে ফায়ারবেস থেকে মুছে ফেলা হয়েছে।' };
     }
   }
 

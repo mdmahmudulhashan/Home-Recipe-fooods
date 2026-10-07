@@ -566,6 +566,12 @@ export const userManagementService = {
       body: JSON.stringify(payload),
     });
   },
+
+  async remove(apiFetch: ApiFetcher, id: number) {
+    return await apiFetch<any>(`/api/users/${id}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 export const settingsService = {
