@@ -63,16 +63,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (
         typeof window !== 'undefined' &&
-        window.location.hostname.includes('netlify.app')
+        (window.location.hostname.includes('netlify.app') ||
+          window.sessionStorage.getItem('hrf_standalone_mode') === '1')
       ) {
         return (await handleStandaloneApiRequest(url, options)) as T;
       }
 
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
         const response = await fetch(url, {
           ...options,
           headers,
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         const rawText = await response.text();
         const trimmed = rawText.trim();
@@ -83,6 +88,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           trimmed.toLowerCase().startsWith('<!doctype') ||
           !(trimmed.startsWith('{') || trimmed.startsWith('['))
         ) {
+          if (typeof window !== 'undefined') {
+            window.sessionStorage.setItem('hrf_standalone_mode', '1');
+          }
           return (await handleStandaloneApiRequest(url, options)) as T;
         }
 
@@ -95,11 +103,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return data as T;
       } catch (err: any) {
         if (
+          err?.name === 'AbortError' ||
           err instanceof SyntaxError ||
           String(err?.message || '').includes('Unexpected token') ||
           String(err?.message || '').includes('Failed to fetch') ||
           String(err?.message || '').includes('NetworkError')
         ) {
+          if (typeof window !== 'undefined') {
+            window.sessionStorage.setItem('hrf_standalone_mode', '1');
+          }
           return (await handleStandaloneApiRequest(url, options)) as T;
         }
         throw err;

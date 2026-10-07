@@ -5,16 +5,7 @@
  * while also staying in sync when running inside the full-stack server.
  */
 
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  deleteDoc,
-  Timestamp,
-} from 'firebase/firestore';
-import { firestoreDb } from '../lib/firebase.ts';
+import { auth } from '../lib/firebase.ts';
 import {
   calculateEmployeeMonthlySalary,
   calculateLeaveDaysCount,
@@ -33,20 +24,18 @@ export interface StandaloneUser {
   createdAt?: string;
 }
 
-const APP_DATA_COLLECTION = 'hrf_app_store';
-
 async function getStoreDoc<T>(key: string, defaultVal: T): Promise<T> {
   try {
-    const snap = await getDoc(doc(firestoreDb, APP_DATA_COLLECTION, key));
-    if (snap.exists() && snap.data()?.items !== undefined) {
-      return snap.data().items as T;
+    const cached = localStorage.getItem(`hrf_cloud_${key}`);
+    if (cached) {
+      return JSON.parse(cached) as T;
     }
   } catch {
-    // Fallback to localStorage cache if Firestore rules block unauthenticated bootstrap read
+    // ignore
   }
+
   try {
-    const cached = localStorage.getItem(`hrf_cloud_${key}`);
-    if (cached) return JSON.parse(cached) as T;
+    localStorage.setItem(`hrf_cloud_${key}`, JSON.stringify(defaultVal));
   } catch {
     // ignore
   }
@@ -58,14 +47,6 @@ async function setStoreDoc<T>(key: string, items: T): Promise<void> {
     localStorage.setItem(`hrf_cloud_${key}`, JSON.stringify(items));
   } catch {
     // ignore
-  }
-  try {
-    await setDoc(doc(firestoreDb, APP_DATA_COLLECTION, key), {
-      items,
-      updatedAt: Timestamp.now(),
-    });
-  } catch {
-    // If strict collection rules block hrf_app_store, individual collections are still synced
   }
 }
 
@@ -335,12 +316,32 @@ const DEFAULT_LEAVES = [
   },
 ];
 
-function getActiveStandaloneUser(): StandaloneUser {
+function getActiveStandaloneUser(usersList: StandaloneUser[] = DEFAULT_USERS): StandaloneUser {
   try {
     const raw = sessionStorage.getItem('hrf_standalone_user');
     if (raw) return JSON.parse(raw);
   } catch {
     // ignore
+  }
+  const fbUser = auth.currentUser;
+  if (fbUser && fbUser.email) {
+    const found = usersList.find(
+      (u) => u.email.toLowerCase() === fbUser.email!.toLowerCase()
+    );
+    if (found) {
+      const { password: _, ...safe } = found;
+      return safe as StandaloneUser;
+    }
+    const resolved: StandaloneUser = {
+      id: 99,
+      uid: fbUser.uid,
+      name: fbUser.displayName || fbUser.email.split('@')[0],
+      email: fbUser.email,
+      role: 'SUPER_ADMIN',
+      assignedDepartmentIds: [],
+      status: 'ACTIVE',
+    };
+    return resolved;
   }
   return DEFAULT_USERS[0];
 }

@@ -59,6 +59,21 @@ import { handleStandaloneApiRequest } from './standaloneFirestoreEngine.ts';
 
 export type ApiFetcher = <T = any>(url: string, options?: RequestInit) => Promise<T>;
 
+function withFastTimeout<T>(promise: Promise<T>, ms = 2500): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    promise
+      .then((val) => {
+        clearTimeout(timer);
+        resolve(val);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 /**
  * Helper to verify that a document written to Cloud Firestore exists on the server.
  * Only runs when `auth.currentUser` is signed in with a verified email so it
@@ -80,30 +95,39 @@ async function syncAndVerifyFirestoreDoc(
   const fullPath = `${collectionName}/${cleanDocId}`;
 
   try {
-    const payload: Record<string, any> = {
-      ...data,
-      updatedAt: serverTimestamp(),
-    };
+    return await withFastTimeout(
+      (async () => {
+        const payload: Record<string, any> = {
+          ...data,
+          updatedAt: serverTimestamp(),
+        };
 
-    if (isCreate) {
-      payload.createdAt = serverTimestamp();
-    } else {
-      const existingSnap = await getDoc(docRef);
-      if (existingSnap.exists() && existingSnap.data()?.createdAt) {
-        payload.createdAt = existingSnap.data().createdAt;
-      } else {
-        payload.createdAt = serverTimestamp();
-      }
-      if (existingSnap.exists() && existingSnap.data()?.createdBy && !payload.createdBy) {
-        payload.createdBy = existingSnap.data().createdBy;
-      }
-    }
+        if (isCreate) {
+          payload.createdAt = serverTimestamp();
+        } else {
+          const existingSnap = await getDoc(docRef);
+          if (existingSnap.exists() && existingSnap.data()?.createdAt) {
+            payload.createdAt = existingSnap.data().createdAt;
+          } else {
+            payload.createdAt = serverTimestamp();
+          }
+          if (
+            existingSnap.exists() &&
+            existingSnap.data()?.createdBy &&
+            !payload.createdBy
+          ) {
+            payload.createdBy = existingSnap.data().createdBy;
+          }
+        }
 
-    await setDoc(docRef, payload);
+        await setDoc(docRef, payload);
 
-    // Explicitly verify from server that the document was persisted in Firestore
-    const verifiedSnap = await getDocFromServer(docRef);
-    return verifiedSnap.exists();
+        // Explicitly verify from server that the document was persisted in Firestore
+        const verifiedSnap = await getDocFromServer(docRef);
+        return verifiedSnap.exists();
+      })(),
+      2500
+    );
   } catch (error) {
     // If permission denied due to role restrictions, log via structured handler only when appropriate
     if (error instanceof Error && error.message.includes('Missing or insufficient permissions')) {
@@ -133,9 +157,14 @@ async function removeAndVerifyFirestoreDoc(
   const cleanDocId = String(docId).replace(/[^a-zA-Z0-9_-]/g, '_');
   const docRef = doc(firestoreDb, collectionName, cleanDocId);
   try {
-    await deleteDoc(docRef);
-    const snap = await getDocFromServer(docRef);
-    return !snap.exists();
+    return await withFastTimeout(
+      (async () => {
+        await deleteDoc(docRef);
+        const snap = await getDocFromServer(docRef);
+        return !snap.exists();
+      })(),
+      2000
+    );
   } catch {
     return false;
   }
@@ -146,16 +175,10 @@ async function removeAndVerifyFirestoreDoc(
 // ============================================================================
 export const authService = {
   async loginWithEmail(email: string, password: string) {
-    // Attempt Firebase Auth sign-in first if account exists in Firebase Auth
-    try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-    } catch {
-      // Fallback to credential verification
-    }
-
     if (
       typeof window !== 'undefined' &&
-      window.location.hostname.includes('netlify.app')
+      (window.location.hostname.includes('netlify.app') ||
+        window.sessionStorage.getItem('hrf_standalone_mode') === '1')
     ) {
       return await handleStandaloneApiRequest('/api/auth/login', {
         method: 'POST',
@@ -163,12 +186,20 @@ export const authService = {
       });
     }
 
+    // Attempt Firebase Auth sign-in in the background without blocking login UI
+    signInWithEmailAndPassword(auth, email.trim(), password).catch(() => {
+      // Non-blocking background attempt
+    });
+
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      const res = await withFastTimeout(
+        fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        }),
+        2500
+      );
       const rawText = await res.text();
       const trimmed = rawText.trim();
       if (
@@ -176,6 +207,9 @@ export const authService = {
         trimmed.toLowerCase().startsWith('<!doctype') ||
         !trimmed.startsWith('{')
       ) {
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem('hrf_standalone_mode', '1');
+        }
         return await handleStandaloneApiRequest('/api/auth/login', {
           method: 'POST',
           body: JSON.stringify({ email, password }),
@@ -189,10 +223,14 @@ export const authService = {
     } catch (err: any) {
       if (
         err instanceof SyntaxError ||
+        String(err?.message || '').includes('timeout') ||
         String(err?.message || '').includes('Unexpected token') ||
         String(err?.message || '').includes('Failed to fetch') ||
         String(err?.message || '').includes('NetworkError')
       ) {
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem('hrf_standalone_mode', '1');
+        }
         return await handleStandaloneApiRequest('/api/auth/login', {
           method: 'POST',
           body: JSON.stringify({ email, password }),
@@ -263,7 +301,7 @@ export const authService = {
 // ============================================================================
 export const fileUploadService = {
   async uploadEmployeePhoto(employeeCode: string, dataUrl: string): Promise<string> {
-    if (!dataUrl || !dataUrl.startsWith('data:image/')) {
+    if (!dataUrl || !dataUrl.startsWith('data:image/') || !auth.currentUser) {
       return dataUrl;
     }
     const cleanCode = String(employeeCode).replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -271,8 +309,13 @@ export const fileUploadService = {
     const photoRef = ref(storage, storagePath);
 
     try {
-      await uploadString(photoRef, dataUrl, 'data_url');
-      return await getDownloadURL(photoRef);
+      return await withFastTimeout(
+        (async () => {
+          await uploadString(photoRef, dataUrl, 'data_url');
+          return await getDownloadURL(photoRef);
+        })(),
+        2500
+      );
     } catch {
       return dataUrl;
     }
@@ -287,18 +330,21 @@ export const fileUploadService = {
     const storagePath = `employee-documents/${cleanCode}/${Date.now()}_${safeFileName}`;
     const docRef = ref(storage, storagePath);
 
-    await uploadBytes(docRef, file);
-    const url = await getDownloadURL(docRef);
+    await withFastTimeout(uploadBytes(docRef, file), 4000);
+    const url = await withFastTimeout(getDownloadURL(docRef), 2500);
     return { name: file.name, url };
   },
 
   async deleteEmployeePhoto(employeeCode: string): Promise<void> {
+    if (!auth.currentUser) {
+      return;
+    }
     try {
       const cleanCode = String(employeeCode).replace(/[^a-zA-Z0-9_-]/g, '_');
       const photoRef = ref(storage, `employee-photos/${cleanCode}/profile.jpg`);
-      await deleteObject(photoRef);
+      await withFastTimeout(deleteObject(photoRef), 1500);
     } catch {
-      // Ignore if file was not uploaded to Storage
+      // Ignore if file was not uploaded to Storage or timed out
     }
   },
 };
