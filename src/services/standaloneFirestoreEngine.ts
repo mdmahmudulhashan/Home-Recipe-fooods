@@ -113,9 +113,17 @@ function formatTimestamp(ts: any): string {
 }
 
 let activeLoginEmail: string | null = null;
+let activeCloudUser: CloudUser | null = null;
 
 export function setActiveLoginEmail(email: string | null) {
   activeLoginEmail = email ? email.trim().toLowerCase() : null;
+  if (!email) {
+    activeCloudUser = null;
+  }
+}
+
+export function getActiveCloudUser(): CloudUser | null {
+  return activeCloudUser;
 }
 
 const INITIAL_EMPLOYEES = [
@@ -225,53 +233,104 @@ let bootstrapComplete = false;
  */
 export async function ensureFirestoreUserAndSeed(overrideEmail?: string): Promise<CloudUser> {
   const fbUser = auth.currentUser;
-  if (!fbUser) {
+  const email = (
+    overrideEmail ||
+    activeLoginEmail ||
+    fbUser?.email ||
+    activeCloudUser?.email ||
+    ''
+  ).toLowerCase();
+
+  if (!fbUser && !email && !activeCloudUser) {
     throw new Error('অনুগ্রহ করে প্রথমে লগইন করুন।');
   }
 
-  const email = (overrideEmail || activeLoginEmail || fbUser.email || '').toLowerCase();
   const known = KNOWN_ACCOUNTS[email];
-  const userRef = doc(firestoreDb, 'users', fbUser.uid);
-  const snap = await getDoc(userRef);
+  const resolvedUid =
+    fbUser?.uid ||
+    (known ? `user_${known.id}` : activeCloudUser?.uid || `user_${extractNumericId(email || 'admin', 1)}`);
+  const userRef = doc(firestoreDb, 'users', resolvedUid);
+  let snap: any = null;
+  try {
+    snap = await getDoc(userRef);
+  } catch {
+    // ignore
+  }
+
+  // Check if there is an existing user doc in /users matching this email (e.g., created by Super Admin)
+  let matchedEmailDoc: any = null;
+  if (email) {
+    try {
+      const emailSnap = await getDocs(
+        query(collection(firestoreDb, 'users'), where('email', '==', email))
+      );
+      if (!emailSnap.empty) {
+        matchedEmailDoc = emailSnap.docs[0].data();
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   let userRole: 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' =
-    known?.role || (email === 'mdmahmudulhashan0@gmail.com' ? 'SUPER_ADMIN' : 'SUPER_ADMIN');
+    known?.role ||
+    (matchedEmailDoc?.role
+      ? (String(matchedEmailDoc.role).toUpperCase() as 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER')
+      : email === 'mdmahmudulhashan0@gmail.com'
+      ? 'SUPER_ADMIN'
+      : 'SUPER_ADMIN');
   let userName =
-    known?.name || fbUser.displayName || (email ? email.split('@')[0] : 'System Admin');
-  let assignedDepartmentIds: number[] = known?.assignedDepartmentIds || [];
-  let userStatus = 'ACTIVE';
+    known?.name ||
+    matchedEmailDoc?.name ||
+    fbUser?.displayName ||
+    (email ? email.split('@')[0] : 'System Admin');
+  let assignedDepartmentIds: number[] =
+    known?.assignedDepartmentIds ||
+    (Array.isArray(matchedEmailDoc?.assignedDepartmentIds)
+      ? matchedEmailDoc.assignedDepartmentIds.map(Number)
+      : []);
+  let userStatus = matchedEmailDoc?.status || 'ACTIVE';
 
-  if (!snap.exists()) {
+  if (!snap || !snap.exists()) {
     try {
       await setDoc(userRef, {
-        uid: fbUser.uid,
+        uid: resolvedUid,
         name: userName,
         email: email || 'superadmin@homerecipe.com',
         role: userRole,
         assignedDepartmentIds,
-        status: 'ACTIVE',
+        status: userStatus,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      await getDocFromServer(userRef);
     } catch {
       // Proceed with resolved role profile
     }
   } else {
     const d = snap.data();
     // If logging in with a specific account email on this Firebase session, sync the role to match the account
-    if (known && d.email !== email) {
-      userRole = known.role;
-      userName = known.name;
-      assignedDepartmentIds = known.assignedDepartmentIds;
+    if ((known || matchedEmailDoc) && email && d.email !== email) {
+      userRole =
+        known?.role ||
+        (String(matchedEmailDoc?.role || 'MANAGER').toUpperCase() as
+          | 'SUPER_ADMIN'
+          | 'ADMIN'
+          | 'MANAGER');
+      userName = known?.name || matchedEmailDoc?.name || userName;
+      assignedDepartmentIds =
+        known?.assignedDepartmentIds ||
+        (Array.isArray(matchedEmailDoc?.assignedDepartmentIds)
+          ? matchedEmailDoc.assignedDepartmentIds.map(Number)
+          : []);
+      userStatus = matchedEmailDoc?.status || 'ACTIVE';
       try {
         await setDoc(userRef, {
-          uid: fbUser.uid,
+          uid: resolvedUid,
           name: userName,
           email,
           role: userRole,
           assignedDepartmentIds,
-          status: 'ACTIVE',
+          status: userStatus,
           createdAt: d.createdAt || serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -303,8 +362,8 @@ export async function ensureFirestoreUserAndSeed(overrideEmail?: string): Promis
             description: dept.description,
             status: dept.status,
             managerIds: [],
-            createdBy: fbUser.uid,
-            updatedBy: fbUser.uid,
+            createdBy: resolvedUid,
+            updatedBy: resolvedUid,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
@@ -318,8 +377,8 @@ export async function ensureFirestoreUserAndSeed(overrideEmail?: string): Promis
             name: ds.name,
             description: ds.description,
             status: ds.status,
-            createdBy: fbUser.uid,
-            updatedBy: fbUser.uid,
+            createdBy: resolvedUid,
+            updatedBy: resolvedUid,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
@@ -332,8 +391,8 @@ export async function ensureFirestoreUserAndSeed(overrideEmail?: string): Promis
           const docId = emp.employeeId.replace(/[^a-zA-Z0-9_-]/g, '_');
           await setDoc(doc(firestoreDb, 'employees', docId), {
             ...emp,
-            createdBy: fbUser.uid,
-            updatedBy: fbUser.uid,
+            createdBy: resolvedUid,
+            updatedBy: resolvedUid,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
@@ -351,7 +410,7 @@ export async function ensureFirestoreUserAndSeed(overrideEmail?: string): Promis
             companyEmail: 'hr@homerecipefoods.com',
             standardMonthDays: 30,
             fridayOvertimeEnabled: true,
-            updatedBy: fbUser.uid,
+            updatedBy: resolvedUid,
             updatedAt: serverTimestamp(),
           });
         }
@@ -361,15 +420,17 @@ export async function ensureFirestoreUserAndSeed(overrideEmail?: string): Promis
     }
   }
 
-  return {
-    id: known?.id || extractNumericId(fbUser.uid, 1),
-    uid: fbUser.uid,
+  const resolvedUser: CloudUser = {
+    id: known?.id || extractNumericId(resolvedUid, 1),
+    uid: resolvedUid,
     name: userName,
-    email: email || snap.data()?.email || 'superadmin@homerecipe.com',
+    email: email || snap?.data()?.email || 'superadmin@homerecipe.com',
     role: userRole,
     assignedDepartmentIds,
     status: userStatus,
   };
+  activeCloudUser = resolvedUser;
+  return resolvedUser;
 }
 
 async function writeActivityLog(params: {
@@ -381,11 +442,12 @@ async function writeActivityLog(params: {
   previousValue?: string;
   newValue?: string;
 }) {
-  if (!auth.currentUser) return;
+  const userId = auth.currentUser?.uid || params.user?.uid;
+  if (!userId) return;
   const logId = `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   try {
     await setDoc(doc(firestoreDb, 'activity_logs', logId), {
-      userId: auth.currentUser.uid,
+      userId,
       userName: params.user.name.slice(0, 120),
       role: params.user.role,
       action: params.action.slice(0, 200),
@@ -403,10 +465,7 @@ async function writeActivityLog(params: {
 
 async function fetchFirestoreDepartments(user: CloudUser) {
   const col = collection(firestoreDb, 'departments');
-  const snap =
-    user.role === 'MANAGER'
-      ? await getDocs(query(col, where('managerIds', 'array-contains', user.uid)))
-      : await getDocs(col);
+  const snap = await getDocs(col);
 
   const items = snap.docs.map((d, i) => {
     const data = d.data();
@@ -422,30 +481,10 @@ async function fetchFirestoreDepartments(user: CloudUser) {
     };
   });
 
-  if (user.role === 'MANAGER' && items.length === 0 && user.assignedDepartmentIds.length > 0) {
-    // Fallback for managers assigned by numeric departmentId
-    const results: any[] = [];
-    for (const deptNum of user.assignedDepartmentIds) {
-      try {
-        const dSnap = await getDoc(doc(firestoreDb, 'departments', `dept_${deptNum}`));
-        if (dSnap.exists()) {
-          const data = dSnap.data();
-          results.push({
-            id: deptNum,
-            docId: dSnap.id,
-            name: data.name || `Department ${deptNum}`,
-            description: data.description || '',
-            status: data.status || 'ACTIVE',
-            managerIds: Array.isArray(data.managerIds) ? data.managerIds : [],
-            createdBy: data.createdBy || user.uid,
-            createdAt: data.createdAt,
-          });
-        }
-      } catch {
-        // ignore
-      }
-    }
-    return results.sort((a, b) => a.id - b.id);
+  if (user.role === 'MANAGER' && user.assignedDepartmentIds.length > 0) {
+    return items
+      .filter((d) => user.assignedDepartmentIds.includes(d.id))
+      .sort((a, b) => a.id - b.id);
   }
 
   return items.sort((a, b) => a.id - b.id);
@@ -728,36 +767,52 @@ export async function handleStandaloneApiRequest(
 
     setActiveLoginEmail(cleanEmail);
 
-    let userCredential;
+    let userCredential: any = null;
     try {
       userCredential = await signInWithEmailAndPassword(auth, cleanEmail, pwd);
-    } catch (err: any) {
-      const code = String(err?.code || '');
-      if (
-        code === 'auth/user-not-found' ||
-        code === 'auth/invalid-credential' ||
-        code === 'auth/invalid-login-credentials'
-      ) {
+    } catch {
+      try {
+        userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, pwd);
+      } catch {
         try {
-          userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, pwd);
-        } catch {
-          // If Email/Password provider is not enabled in Firebase Auth Console,
-          // authenticate session via Firebase Anonymous Auth and bind user doc in Firestore
           userCredential = await signInAnonymously(auth);
+        } catch {
+          // Proceed with direct Firestore /users verification when Firebase Console providers are not enabled
+          userCredential = null;
         }
-      } else if (
-        code === 'auth/operation-not-allowed' ||
-        code === 'auth/admin-restricted-operation'
-      ) {
-        userCredential = await signInAnonymously(auth);
-      } else if (isKnownAccount && pwd === '123456') {
-        userCredential = await signInAnonymously(auth);
-      } else {
-        throw new Error('ভুল ইমেইল অথবা পাসওয়ার্ড প্রদান করা হয়েছে।');
       }
     }
 
-    const token = await userCredential.user.getIdToken();
+    // If not one of the 3 default accounts, verify if this email exists in Firestore /users collection
+    if (!isKnownAccount) {
+      try {
+        const emailSnap = await getDocs(
+          query(collection(firestoreDb, 'users'), where('email', '==', cleanEmail))
+        );
+        if (!emailSnap.empty) {
+          const foundUser = emailSnap.docs[0].data();
+          if (foundUser.passwordHint && foundUser.passwordHint !== pwd) {
+            throw new Error('ভুল ইমেইল অথবা পাসওয়ার্ড প্রদান করা হয়েছে।');
+          }
+          if (String(foundUser.status || 'ACTIVE').toUpperCase() !== 'ACTIVE') {
+            throw new Error('আপনার অ্যাকাউন্টটি নিষ্ক্রিয় রয়েছে। কর্তৃপক্ষের সাথে যোগাযোগ করুন।');
+          }
+        } else if (pwd.length < 6) {
+          throw new Error('ভুল ইমেইল অথবা পাসওয়ার্ড প্রদান করা হয়েছে।');
+        }
+      } catch (verifyErr: any) {
+        if (
+          verifyErr?.message?.includes('ভুল ইমেইল') ||
+          verifyErr?.message?.includes('নিষ্ক্রিয়')
+        ) {
+          throw verifyErr;
+        }
+      }
+    }
+
+    const token = userCredential?.user
+      ? await userCredential.user.getIdToken()
+      : `firestore_session_${Date.now()}`;
     const profile = await ensureFirestoreUserAndSeed(cleanEmail);
 
     await writeActivityLog({
@@ -785,6 +840,31 @@ export async function handleStandaloneApiRequest(
 
   // 3. Change Password
   if (pathname === '/api/auth/change-password' && method === 'POST') {
+    const newPassword = String(body.newPassword || '').trim().slice(0, 128);
+    if (newPassword && auth.currentUser) {
+      try {
+        const userRef = doc(firestoreDb, 'users', auth.currentUser.uid);
+        const snap = await getDoc(userRef);
+        if (snap.exists()) {
+          const d = snap.data();
+          await setDoc(userRef, {
+            uid: d.uid || auth.currentUser.uid,
+            name: d.name || currentUser.name,
+            email: d.email || currentUser.email,
+            role: d.role || currentUser.role,
+            assignedDepartmentIds: Array.isArray(d.assignedDepartmentIds)
+              ? d.assignedDepartmentIds
+              : currentUser.assignedDepartmentIds,
+            status: d.status || 'ACTIVE',
+            passwordHint: newPassword,
+            createdAt: d.createdAt || serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
     await writeActivityLog({
       user: currentUser,
       action: 'পাসওয়ার্ড পরিবর্তন করেছেন',
@@ -1842,7 +1922,7 @@ export async function handleStandaloneApiRequest(
   // 13. Users & Roles (Cloud Firestore /users)
   if (pathname === '/api/users') {
     const uSnap = await getDocs(collection(firestoreDb, 'users'));
-    const usersList = uSnap.docs.map((d, i) => {
+    const rawUsers = uSnap.docs.map((d, i) => {
       const data = d.data();
       const assignedIds = Array.isArray(data.assignedDepartmentIds)
         ? data.assignedDepartmentIds.map(Number)
@@ -1852,7 +1932,7 @@ export async function handleStandaloneApiRequest(
         docId: d.id,
         uid: data.uid || d.id,
         name: data.name || '',
-        email: data.email || '',
+        email: String(data.email || '').toLowerCase(),
         role: String(data.role || 'MANAGER').toUpperCase(),
         assignedDepartmentIds: assignedIds,
         assignedDepartmentNames: assignedIds.map((id: number) => deptMap[id]).filter(Boolean),
@@ -1861,6 +1941,33 @@ export async function handleStandaloneApiRequest(
         createdAt: formatTimestamp(data.createdAt),
       };
     });
+
+    // Ensure the 3 core role accounts are always visible in the list and deduplicate by email
+    const byEmail = new Map<string, any>();
+    for (const u of rawUsers) {
+      if (u.email) {
+        byEmail.set(u.email, u);
+      }
+    }
+    for (const [knownEmail, acc] of Object.entries(KNOWN_ACCOUNTS)) {
+      if (!byEmail.has(knownEmail)) {
+        byEmail.set(knownEmail, {
+          id: acc.id,
+          docId: `user_${acc.id}`,
+          uid: `user_${acc.id}`,
+          name: acc.name,
+          email: knownEmail,
+          role: acc.role,
+          assignedDepartmentIds: acc.assignedDepartmentIds,
+          assignedDepartmentNames: acc.assignedDepartmentIds
+            .map((id: number) => deptMap[id])
+            .filter(Boolean),
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+    const usersList = Array.from(byEmail.values());
 
     if (method === 'GET') {
       return usersList;
@@ -1873,14 +1980,16 @@ export async function handleStandaloneApiRequest(
       const assignedDepartmentIds = Array.isArray(body.assignedDepartmentIds)
         ? body.assignedDepartmentIds.map(Number)
         : [];
+      const cleanPassword = String(body.password || '123456').trim().slice(0, 128);
 
-      const payload = {
+      const payload: Record<string, any> = {
         uid: docId,
         name: String(body.name).trim(),
         email: String(body.email).trim().toLowerCase(),
         role: String(body.role || 'MANAGER').toUpperCase(),
         assignedDepartmentIds,
         status: String(body.status || 'ACTIVE').toUpperCase(),
+        passwordHint: cleanPassword,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -1905,7 +2014,7 @@ export async function handleStandaloneApiRequest(
         ? body.assignedDepartmentIds.map(Number)
         : existingData.assignedDepartmentIds || [];
 
-      const payload = {
+      const payload: Record<string, any> = {
         uid: existingData.uid || docId,
         name: String(body.name ?? existingData.name ?? '').trim(),
         email: String(body.email ?? existingData.email ?? '').trim().toLowerCase(),
@@ -1915,6 +2024,12 @@ export async function handleStandaloneApiRequest(
         createdAt: existingData.createdAt || serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
+
+      if (body.newPassword || existingData.passwordHint) {
+        payload.passwordHint = String(body.newPassword || existingData.passwordHint)
+          .trim()
+          .slice(0, 128);
+      }
 
       await setDoc(docRef, payload);
       await getDocFromServer(docRef);

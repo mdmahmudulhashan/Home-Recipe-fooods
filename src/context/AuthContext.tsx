@@ -4,6 +4,8 @@ import { authService } from '../services/firebaseServices.ts';
 import {
   handleStandaloneApiRequest,
   ensureFirestoreUserAndSeed,
+  setActiveLoginEmail,
+  getActiveCloudUser,
 } from '../services/standaloneFirestoreEngine.ts';
 
 export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER';
@@ -84,9 +86,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
       } else if (mounted) {
-        setUser(null);
-        setToken(null);
-        setLoading(false);
+        const activeUser = getActiveCloudUser();
+        if (activeUser) {
+          setUser(activeUser);
+          setLoading(false);
+        } else {
+          setUser(null);
+          setToken(null);
+          setLoading(false);
+        }
       }
     });
 
@@ -109,6 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    setActiveLoginEmail(null);
     await authService.logout();
     setToken(null);
     setUser(null);

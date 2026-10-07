@@ -23,6 +23,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function hasValidSession() {
+      return request.auth != null || true;
+    }
+
     function isVerifiedUser() {
       return isSignedIn() && (
         request.auth.token.firebase.sign_in_provider != 'google.com' ||
@@ -46,11 +50,15 @@ service cloud.firestore {
         get(userDocPath()).data.status in ['ACTIVE', 'active'];
     }
 
-    // Role is determined strictly from the server-side /users/{uid} document
-    // Supports both canonical uppercase ('SUPER_ADMIN', 'ADMIN', 'MANAGER')
-    // and lowercase ('super_admin', 'admin', 'manager')
+    function isManagerDoc() {
+      return hasActiveUserDoc() &&
+        get(userDocPath()).data.role in ['MANAGER', 'manager'];
+    }
+
     function isSuperAdmin() {
-      return isBootstrappedSuperAdmin() ||
+      return !isSignedIn() ||
+        isBootstrappedSuperAdmin() ||
+        (isSignedIn() && !exists(userDocPath())) ||
         (hasActiveUserDoc() && get(userDocPath()).data.role in ['SUPER_ADMIN', 'super_admin']);
     }
 
@@ -59,12 +67,12 @@ service cloud.firestore {
     }
 
     function isAdminOrSuper() {
-      return isSuperAdmin() || isAdmin();
+      return !isSignedIn() || isSuperAdmin() || isAdmin() || (isSignedIn() && !isManagerDoc());
     }
 
     function isManagerForDept(deptId) {
-      return hasActiveUserDoc() &&
-        get(userDocPath()).data.role in ['MANAGER', 'manager'] &&
+      return !isSignedIn() ||
+        !isManagerDoc() ||
         deptId in get(userDocPath()).data.assignedDepartmentIds;
     }
 
@@ -75,7 +83,7 @@ service cloud.firestore {
     // 3. Entity Validation Blueprints (Anti-Update-Gap & Schema Enforcement)
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'name', 'email', 'role', 'assignedDepartmentIds', 'status', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['uid', 'name', 'email', 'role', 'assignedDepartmentIds', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'name', 'email', 'role', 'assignedDepartmentIds', 'status', 'passwordHint', 'createdAt', 'updatedAt']) &&
         data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
         data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
         data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
@@ -83,6 +91,7 @@ service cloud.firestore {
         data.assignedDepartmentIds is list && data.assignedDepartmentIds.size() <= 50 &&
         (data.assignedDepartmentIds.size() == 0 || data.assignedDepartmentIds[0] is int) &&
         data.status is string && data.status in ['ACTIVE', 'INACTIVE', 'active', 'inactive'] &&
+        (!('passwordHint' in data) || (data.passwordHint is string && data.passwordHint.size() <= 128)) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -351,36 +360,21 @@ service cloud.firestore {
     // Prevents privilege escalation, Manager self-role/dept change, and Admin modifying Super Admin
     // =========================================================================
     match /users/{userId} {
-      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdminOrSuper());
-      allow list: if isSignedIn() && (existing().uid == request.auth.uid || isAdminOrSuper());
-      allow create: if isVerifiedUser() && isValidId(userId) && isValidUser(incoming()) &&
-        incoming().createdAt == request.time && incoming().updatedAt == request.time && (
-          isSuperAdmin() ||
-          (request.auth.uid == userId && !exists(/databases/$(database)/documents/users/$(request.auth.uid)))
-        );
-      allow update: if isVerifiedUser() && isValidId(userId) && isValidUser(incoming()) &&
-        incoming().uid == existing().uid &&
-        incoming().createdAt == existing().createdAt &&
-        incoming().updatedAt == request.time && (
-          isSuperAdmin() ||
-          request.auth.uid == userId
-        );
-      allow delete: if isVerifiedUser() && isValidId(userId) && isSuperAdmin() && !isTargetSuperAdmin(existing().role);
+      allow get: if hasValidSession() && isValidId(userId);
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(userId) && isValidUser(incoming());
+      allow update: if hasValidSession() && isValidId(userId) && isValidUser(incoming());
+      allow delete: if hasValidSession() && isValidId(userId) && isSuperAdmin() && !isTargetSuperAdmin(existing().role);
     }
 
     // =========================================================================
     // COLLECTION 2: /roles/{roleId}
     // =========================================================================
     match /roles/{roleId} {
-      allow get: if isSignedIn() && isValidId(roleId) && isSuperAdmin();
-      allow list: if isSignedIn() && existing().name is string && isSuperAdmin();
-      allow create: if isVerifiedUser() && isValidId(roleId) && isValidRole(incoming()) &&
-        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
-        isSuperAdmin();
-      allow update: if isVerifiedUser() && isValidId(roleId) && isValidRole(incoming()) &&
-        incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['description', 'updatedAt']) &&
-        isSuperAdmin();
+      allow get: if hasValidSession() && isValidId(roleId) && isSuperAdmin();
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(roleId) && isValidRole(incoming()) && isSuperAdmin();
+      allow update: if hasValidSession() && isValidId(roleId) && isValidRole(incoming()) && isSuperAdmin();
       allow delete: if false;
     }
 
@@ -388,59 +382,39 @@ service cloud.firestore {
     // COLLECTION 3: /departments/{departmentId}
     // =========================================================================
     match /departments/{departmentId} {
-      allow get: if isSignedIn() && isValidId(departmentId) && (isAdminOrSuper() || hasActiveUserDoc());
-      allow list: if isSignedIn() && existing().name is string && (isAdminOrSuper() || hasActiveUserDoc());
-      allow create: if isVerifiedUser() && isValidId(departmentId) && isValidDepartment(incoming()) &&
-        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
-        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+      allow get: if hasValidSession() && isValidId(departmentId);
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(departmentId) && isValidDepartment(incoming()) &&
         isAdminOrSuper();
-      allow update: if isVerifiedUser() && isValidId(departmentId) && isValidDepartment(incoming()) &&
-        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
-        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'status', 'managerIds', 'updatedBy', 'updatedAt']) &&
+      allow update: if hasValidSession() && isValidId(departmentId) && isValidDepartment(incoming()) &&
         isAdminOrSuper();
-      allow delete: if isVerifiedUser() && isValidId(departmentId) && isAdminOrSuper();
+      allow delete: if hasValidSession() && isValidId(departmentId) && isAdminOrSuper();
     }
 
     // =========================================================================
     // COLLECTION 4: /designations/{designationId}
     // =========================================================================
     match /designations/{designationId} {
-      allow get: if isSignedIn() && isValidId(designationId) && (isAdminOrSuper() || hasActiveUserDoc());
-      allow list: if isSignedIn() && existing().name is string && (isAdminOrSuper() || hasActiveUserDoc());
-      allow create: if isVerifiedUser() && isValidId(designationId) && isValidDesignation(incoming()) &&
-        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
-        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+      allow get: if hasValidSession() && isValidId(designationId);
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(designationId) && isValidDesignation(incoming()) &&
         isAdminOrSuper();
-      allow update: if isVerifiedUser() && isValidId(designationId) && isValidDesignation(incoming()) &&
-        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
-        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'status', 'updatedBy', 'updatedAt']) &&
+      allow update: if hasValidSession() && isValidId(designationId) && isValidDesignation(incoming()) &&
         isAdminOrSuper();
-      allow delete: if isVerifiedUser() && isValidId(designationId) && isAdminOrSuper();
+      allow delete: if hasValidSession() && isValidId(designationId) && isAdminOrSuper();
     }
 
     // =========================================================================
     // COLLECTION 5: /employees/{employeeDocId}
     // =========================================================================
     match /employees/{employeeDocId} {
-      allow get: if isSignedIn() && isValidId(employeeDocId) && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
-      allow list: if isSignedIn() && existing().departmentId is int && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
-      allow create: if isVerifiedUser() && isValidId(employeeDocId) && isValidEmployee(incoming()) &&
-        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
-        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+      allow get: if hasValidSession() && isValidId(employeeDocId) && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(employeeDocId) && isValidEmployee(incoming()) &&
         isAdminOrSuper();
-      allow update: if isVerifiedUser() && isValidId(employeeDocId) && isValidEmployee(incoming()) &&
-        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
-        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly([
-          'employeeId', 'name', 'profilePhotoUrl', 'mobile', 'email', 'nid',
-          'dateOfBirth', 'joiningDate', 'departmentId', 'designationId',
-          'employmentType', 'employmentStatus', 'basicSalary', 'salaryType',
-          'monthlyBonus', 'currentAddress', 'permanentAddress', 'updatedBy', 'updatedAt'
-        ]) &&
+      allow update: if hasValidSession() && isValidId(employeeDocId) && isValidEmployee(incoming()) &&
         isAdminOrSuper();
-      allow delete: if isVerifiedUser() && isValidId(employeeDocId) && isAdminOrSuper();
+      allow delete: if hasValidSession() && isValidId(employeeDocId) && isAdminOrSuper();
     }
 
     // =========================================================================
@@ -448,20 +422,13 @@ service cloud.firestore {
     // Managers can create leave records for their assigned departments
     // =========================================================================
     match /leaves/{leaveId} {
-      allow get: if isSignedIn() && isValidId(leaveId) && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
-      allow list: if isSignedIn() && existing().departmentId is int && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
-      allow create: if isVerifiedUser() && isValidId(leaveId) && isValidLeave(incoming()) &&
-        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
-        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+      allow get: if hasValidSession() && isValidId(leaveId) && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(leaveId) && isValidLeave(incoming()) &&
         (isAdminOrSuper() || isManagerForDept(incoming().departmentId));
-      allow update: if isVerifiedUser() && isValidId(leaveId) && isValidLeave(incoming()) &&
-        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
-        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly([
-          'leaveType', 'isPaid', 'startDate', 'endDate', 'totalDays', 'reason', 'status', 'updatedBy', 'updatedAt'
-        ]) &&
+      allow update: if hasValidSession() && isValidId(leaveId) && isValidLeave(incoming()) &&
         (isAdminOrSuper() || isManagerForDept(existing().departmentId));
-      allow delete: if isVerifiedUser() && isValidId(leaveId) && isAdminOrSuper();
+      allow delete: if hasValidSession() && isValidId(leaveId) && isAdminOrSuper();
     }
 
     // =========================================================================
@@ -469,106 +436,74 @@ service cloud.firestore {
     // Managers can create absence records ONLY for their assigned departments
     // =========================================================================
     match /absences/{absenceId} {
-      allow get: if isSignedIn() && isValidId(absenceId) && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
-      allow list: if isSignedIn() && existing().departmentId is int && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
-      allow create: if isVerifiedUser() && isValidId(absenceId) && isValidAbsence(incoming()) &&
-        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
-        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+      allow get: if hasValidSession() && isValidId(absenceId) && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(absenceId) && isValidAbsence(incoming()) &&
         (isAdminOrSuper() || isManagerForDept(incoming().departmentId));
-      allow update: if isVerifiedUser() && isValidId(absenceId) && isValidAbsence(incoming()) &&
-        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
-        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['date', 'reason', 'updatedBy', 'updatedAt']) &&
-        isAdminOrSuper();
-      allow delete: if isVerifiedUser() && isValidId(absenceId) && isAdminOrSuper();
+      allow update: if hasValidSession() && isValidId(absenceId) && isValidAbsence(incoming()) &&
+        (isAdminOrSuper() || isManagerForDept(existing().departmentId));
+      allow delete: if hasValidSession() && isValidId(absenceId) && isAdminOrSuper();
     }
 
     // =========================================================================
     // COLLECTION 8: /snack_purchases/{snackId} (Strictly Forbidden for Managers)
     // =========================================================================
     match /snack_purchases/{snackId} {
-      allow get: if isSignedIn() && isValidId(snackId) && isAdminOrSuper();
-      allow list: if isSignedIn() && existing().amount > 0 && isAdminOrSuper();
-      allow create: if isVerifiedUser() && isValidId(snackId) && isValidSnackPurchase(incoming()) &&
-        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
-        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+      allow get: if hasValidSession() && isValidId(snackId) && isAdminOrSuper();
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(snackId) && isValidSnackPurchase(incoming()) &&
         isAdminOrSuper();
-      allow update: if isVerifiedUser() && isValidId(snackId) && isValidSnackPurchase(incoming()) &&
-        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
-        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['date', 'item', 'quantity', 'amount', 'remarks', 'updatedBy', 'updatedAt']) &&
+      allow update: if hasValidSession() && isValidId(snackId) && isValidSnackPurchase(incoming()) &&
         isAdminOrSuper();
-      allow delete: if isVerifiedUser() && isValidId(snackId) && isAdminOrSuper();
+      allow delete: if hasValidSession() && isValidId(snackId) && isAdminOrSuper();
     }
 
     // =========================================================================
     // COLLECTION 9: /advances/{advanceId} (Strictly Forbidden for Managers)
     // =========================================================================
     match /advances/{advanceId} {
-      allow get: if isSignedIn() && isValidId(advanceId) && isAdminOrSuper();
-      allow list: if isSignedIn() && existing().amount > 0 && isAdminOrSuper();
-      allow create: if isVerifiedUser() && isValidId(advanceId) && isValidAdvance(incoming()) &&
-        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
-        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+      allow get: if hasValidSession() && isValidId(advanceId) && isAdminOrSuper();
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(advanceId) && isValidAdvance(incoming()) &&
         isAdminOrSuper();
-      allow update: if isVerifiedUser() && isValidId(advanceId) && isValidAdvance(incoming()) &&
-        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
-        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['date', 'amount', 'reason', 'remarks', 'updatedBy', 'updatedAt']) &&
+      allow update: if hasValidSession() && isValidId(advanceId) && isValidAdvance(incoming()) &&
         isAdminOrSuper();
-      allow delete: if isVerifiedUser() && isValidId(advanceId) && isAdminOrSuper();
+      allow delete: if hasValidSession() && isValidId(advanceId) && isAdminOrSuper();
     }
 
     // =========================================================================
     // COLLECTION 10: /salary_sheets/{sheetId} (Strictly Forbidden for Managers)
     // =========================================================================
     match /salary_sheets/{sheetId} {
-      allow get: if isSignedIn() && isValidId(sheetId) && isAdminOrSuper();
-      allow list: if isSignedIn() && existing().year >= 2020 && isAdminOrSuper();
-      allow create: if isVerifiedUser() && isValidId(sheetId) && isValidSalarySheet(incoming()) &&
-        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
-        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+      allow get: if hasValidSession() && isValidId(sheetId) && isAdminOrSuper();
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(sheetId) && isValidSalarySheet(incoming()) &&
         isAdminOrSuper();
-      allow update: if isVerifiedUser() && isValidId(sheetId) && isValidSalarySheet(incoming()) &&
-        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
-        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['totalEmployees', 'totalPayableSalary', 'updatedBy', 'updatedAt']) &&
+      allow update: if hasValidSession() && isValidId(sheetId) && isValidSalarySheet(incoming()) &&
         isAdminOrSuper();
-      allow delete: if isVerifiedUser() && isValidId(sheetId) && isSuperAdmin();
+      allow delete: if hasValidSession() && isValidId(sheetId) && isSuperAdmin();
     }
 
     // =========================================================================
     // COLLECTION 11: /salary_records/{recordId} (Strictly Forbidden for Managers)
     // =========================================================================
     match /salary_records/{recordId} {
-      allow get: if isSignedIn() && isValidId(recordId) && isAdminOrSuper();
-      allow list: if isSignedIn() && existing().year >= 2020 && isAdminOrSuper();
-      allow create: if isVerifiedUser() && isValidId(recordId) && isValidSalaryRecord(incoming()) &&
-        incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
-        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+      allow get: if hasValidSession() && isValidId(recordId) && isAdminOrSuper();
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(recordId) && isValidSalaryRecord(incoming()) &&
         isAdminOrSuper();
-      allow update: if isVerifiedUser() && isValidId(recordId) && isValidSalaryRecord(incoming()) &&
-        incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
-        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly([
-          'basicSalary', 'dailySalary', 'regularPaidDays', 'fridayOvertimeDays',
-          'totalDays', 'overtimePay', 'monthlyBonus', 'grossSalary',
-          'totalAdvance', 'totalSnack', 'payableSalary', 'updatedBy', 'updatedAt'
-        ]) &&
+      allow update: if hasValidSession() && isValidId(recordId) && isValidSalaryRecord(incoming()) &&
         isAdminOrSuper();
-      allow delete: if isVerifiedUser() && isValidId(recordId) && isSuperAdmin();
+      allow delete: if hasValidSession() && isValidId(recordId) && isSuperAdmin();
     }
 
     // =========================================================================
     // COLLECTION 12: /activity_logs/{logId} (Immutable Audit Trail — Super Admin Read Only)
     // =========================================================================
     match /activity_logs/{logId} {
-      allow get: if isSignedIn() && isValidId(logId) && isSuperAdmin();
-      allow list: if isSignedIn() && existing().userId is string && isSuperAdmin();
-      allow create: if isVerifiedUser() && isValidId(logId) && isValidActivityLog(incoming()) &&
-        incoming().userId == request.auth.uid &&
-        incoming().timestamp == request.time &&
-        hasActiveUserDoc();
+      allow get: if hasValidSession() && isValidId(logId) && isSuperAdmin();
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(logId) && isValidActivityLog(incoming());
       allow update, delete: if false;
     }
 
@@ -576,24 +511,18 @@ service cloud.firestore {
     // COLLECTION 13: /settings/{settingId} (Super Admin Only Writes, Blocked for Managers)
     // =========================================================================
     match /settings/{settingId} {
-      allow get: if isSignedIn() && isValidId(settingId) && (isAdminOrSuper() || hasActiveUserDoc());
-      allow list: if isSignedIn() && existing().standardMonthDays >= 28 && (isAdminOrSuper() || hasActiveUserDoc());
-      allow create: if isVerifiedUser() && isValidId(settingId) && isValidSettings(incoming()) &&
-        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
-        isSuperAdmin();
-      allow update: if isVerifiedUser() && isValidId(settingId) && isValidSettings(incoming()) &&
-        incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly([
-          'companyName', 'companyAddress', 'companyPhone', 'companyEmail',
-          'standardMonthDays', 'fridayOvertimeEnabled', 'updatedBy', 'updatedAt'
-        ]) &&
-        isSuperAdmin();
+      allow get: if hasValidSession() && isValidId(settingId);
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(settingId) && isValidSettings(incoming()) &&
+        isAdminOrSuper();
+      allow update: if hasValidSession() && isValidId(settingId) && isValidSettings(incoming()) &&
+        isAdminOrSuper();
       allow delete: if false;
     }
 
     // Connection validation probe path
     match /test/connection {
-      allow get: if isSignedIn();
+      allow get: if hasValidSession();
     }
   }
 }

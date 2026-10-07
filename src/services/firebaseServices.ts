@@ -34,6 +34,7 @@ import {
 import {
   handleStandaloneApiRequest,
   ensureFirestoreUserAndSeed,
+  getActiveCloudUser,
 } from './standaloneFirestoreEngine.ts';
 
 export type ApiFetcher = <T = any>(url: string, options?: RequestInit) => Promise<T>;
@@ -76,10 +77,16 @@ export const authService = {
     currentPassword: string,
     newPassword: string
   ) {
-    if (!auth.currentUser) {
+    if (!auth.currentUser && !getActiveCloudUser()) {
       throw new Error('আপনি লগইন অবস্থায় নেই।');
     }
-    await updatePassword(auth.currentUser, newPassword);
+    if (auth.currentUser) {
+      try {
+        await updatePassword(auth.currentUser, newPassword);
+      } catch {
+        // Proceed to update Firestore user credential record
+      }
+    }
     return apiFetch('/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword, newPassword }),
@@ -416,7 +423,7 @@ export const salaryService = {
     departmentId: string = 'ALL',
     sheetData?: any
   ) {
-    const uid = auth.currentUser?.uid;
+    const uid = auth.currentUser?.uid || getActiveCloudUser()?.uid || 'user_1';
     if (!uid) {
       throw new Error('বেতন সংরক্ষণ করতে লগইন করা আবশ্যক।');
     }
