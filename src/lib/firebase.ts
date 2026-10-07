@@ -21,20 +21,17 @@ import {
 } from 'firebase/storage';
 import appletConfig from '../../firebase-applet-config.json';
 
-// Centralized Firebase Configuration supporting VITE_FIREBASE_* environment variables
-// with automatic fallback to the provisioned firebase-applet-config.json
-const env = (import.meta as any).env || {};
-
+// Always use the provisioned Firebase project `storied-tine-xz0s9`
+// (`ai-studio-b4dc5539-9253-4b65-a3c3-da3fa3998007`) as the single source of truth,
+// preventing any mismatched VITE_FIREBASE_* environment variables on Netlify from overriding it.
 const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || appletConfig.apiKey,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || appletConfig.authDomain,
-  projectId: env.VITE_FIREBASE_PROJECT_ID || appletConfig.projectId,
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || appletConfig.storageBucket,
-  messagingSenderId:
-    env.VITE_FIREBASE_MESSAGING_SENDER_ID || appletConfig.messagingSenderId,
-  appId: env.VITE_FIREBASE_APP_ID || appletConfig.appId,
-  firestoreDatabaseId:
-    env.VITE_FIREBASE_DATABASE_ID || appletConfig.firestoreDatabaseId,
+  apiKey: appletConfig.apiKey,
+  authDomain: appletConfig.authDomain,
+  projectId: appletConfig.projectId,
+  storageBucket: appletConfig.storageBucket,
+  messagingSenderId: appletConfig.messagingSenderId,
+  appId: appletConfig.appId,
+  firestoreDatabaseId: appletConfig.firestoreDatabaseId,
 };
 
 const app = initializeApp(firebaseConfig);

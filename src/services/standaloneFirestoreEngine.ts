@@ -1,70 +1,76 @@
 /**
- * STANDALONE CLOUD FIRESTORE DATA ENGINE
- * Allows the application to run 100% on Netlify / static hosting using
- * Cloud Firestore directly when the Node.js /api/* server is not present,
- * while also staying in sync when running inside the full-stack server.
+ * PURE CLOUD FIRESTORE DATA ENGINE (storied-tine-xz0s9)
+ * Single source of truth for all HR data across AI Studio and Netlify production.
+ *
+ * Zero localStorage / Zero sessionStorage / Zero mock persistence.
+ * All data persists directly in Cloud Firestore (`ai-studio-b4dc5539-9253-4b65-a3c3-da3fa3998007`)
+ * inside project `storied-tine-xz0s9`.
  */
 
-import { auth } from '../lib/firebase.ts';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+} from 'firebase/auth';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocFromServer,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  serverTimestamp,
+  query,
+  where,
+} from 'firebase/firestore';
+import { auth, firestoreDb } from '../lib/firebase.ts';
 import {
   calculateEmployeeMonthlySalary,
   calculateLeaveDaysCount,
   getDailyAttendanceStatus,
 } from '../shared/salaryEngine.ts';
 
-export interface StandaloneUser {
+export interface CloudUser {
   id: number;
   uid: string;
   name: string;
   email: string;
-  password?: string;
   role: 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER';
   assignedDepartmentIds: number[];
   status: string;
   createdAt?: string;
 }
 
-async function getStoreDoc<T>(key: string, defaultVal: T): Promise<T> {
-  try {
-    const cached = localStorage.getItem(`hrf_cloud_${key}`);
-    if (cached) {
-      return JSON.parse(cached) as T;
-    }
-  } catch {
-    // ignore
+const KNOWN_ACCOUNTS: Record<
+  string,
+  {
+    id: number;
+    name: string;
+    role: 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER';
+    assignedDepartmentIds: number[];
   }
-
-  try {
-    localStorage.setItem(`hrf_cloud_${key}`, JSON.stringify(defaultVal));
-  } catch {
-    // ignore
-  }
-  return defaultVal;
-}
-
-async function setStoreDoc<T>(key: string, items: T): Promise<void> {
-  try {
-    localStorage.setItem(`hrf_cloud_${key}`, JSON.stringify(items));
-  } catch {
-    // ignore
-  }
-}
-
-const now = new Date();
-const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-const todayStr = `${ym}-${String(now.getDate()).padStart(2, '0')}`;
-
-const DEFAULT_SETTINGS = {
-  id: 1,
-  companyName: 'হোম রেসিপি ফুডস্',
-  companyAddress: 'চট্টগ্রাম, বাংলাদেশ',
-  companyPhone: '+880 1819-345678',
-  companyEmail: 'hr@homerecipefoods.com',
-  standardMonthDays: 30,
-  fridayOvertimeEnabled: true,
+> = {
+  'superadmin@homerecipe.com': {
+    id: 1,
+    name: 'মোঃ মাহমুদুল হাসান (সুপার অ্যাডমিন)',
+    role: 'SUPER_ADMIN',
+    assignedDepartmentIds: [],
+  },
+  'admin@homerecipe.com': {
+    id: 2,
+    name: 'তানভীর আহমেদ (এইচআর অ্যাডমিন)',
+    role: 'ADMIN',
+    assignedDepartmentIds: [],
+  },
+  'manager@homerecipe.com': {
+    id: 3,
+    name: 'কামরুল ইসলাম (সেলস ও প্রোডাকশন ম্যানেজার)',
+    role: 'MANAGER',
+    assignedDepartmentIds: [1, 3],
+  },
 };
 
-const DEFAULT_DEPARTMENTS = [
+const INITIAL_DEPARTMENTS = [
   { id: 1, name: 'Production', description: 'খাদ্য উৎপাদন ও প্রক্রিয়াজাতকরণ বিভাগ', status: 'ACTIVE' },
   { id: 2, name: 'Bakery', description: 'বেকারি ও কনফেকশনারি উৎপাদন বিভাগ', status: 'ACTIVE' },
   { id: 3, name: 'Sales', description: 'বিক্রয় ও বিপণন বিভাগ', status: 'ACTIVE' },
@@ -74,7 +80,7 @@ const DEFAULT_DEPARTMENTS = [
   { id: 7, name: 'Management', description: 'সার্বিক ব্যবস্থাপনা বিভাগ', status: 'ACTIVE' },
 ];
 
-const DEFAULT_DESIGNATIONS = [
+const INITIAL_DESIGNATIONS = [
   { id: 1, name: 'Manager', description: 'বিভাগীয় ব্যবস্থাপক', status: 'ACTIVE' },
   { id: 2, name: 'Supervisor', description: 'সুপারভাইজার ও মান নিয়ন্ত্রক', status: 'ACTIVE' },
   { id: 3, name: 'Accountant', description: 'হিসাবরক্ষক', status: 'ACTIVE' },
@@ -84,297 +90,469 @@ const DEFAULT_DESIGNATIONS = [
   { id: 7, name: 'Cleaner', description: 'পরিচ্ছন্নতা কর্মী', status: 'ACTIVE' },
 ];
 
-const DEFAULT_USERS: StandaloneUser[] = [
-  {
-    id: 1,
-    uid: 'local-superadmin-1',
-    name: 'মোঃ মাহমুদুল হাসান (সুপার অ্যাডমিন)',
-    email: 'superadmin@homerecipe.com',
-    password: '123456',
-    role: 'SUPER_ADMIN',
-    assignedDepartmentIds: [],
-    status: 'ACTIVE',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    uid: 'local-admin-1',
-    name: 'তানভীর আহমেদ (এইচআর অ্যাডমিন)',
-    email: 'admin@homerecipe.com',
-    password: '123456',
-    role: 'ADMIN',
-    assignedDepartmentIds: [],
-    status: 'ACTIVE',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 3,
-    uid: 'local-manager-1',
-    name: 'কামরুল ইসলাম (সেলস ও প্রোডাকশন ম্যানেজার)',
-    email: 'manager@homerecipe.com',
-    password: '123456',
-    role: 'MANAGER',
-    assignedDepartmentIds: [1, 3],
-    status: 'ACTIVE',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-const DEFAULT_EMPLOYEES = [
-  {
-    id: 1,
-    employeeCode: 'HRF-1001',
-    fullName: 'আব্দুর রহিম',
-    photoUrl: '',
-    mobile: '01812-345001',
-    email: 'rahim@homerecipefoods.com',
-    nid: '1992159456001',
-    dateOfBirth: '1992-05-14',
-    joiningDate: '2023-01-01',
-    departmentId: 1,
-    designationId: 2,
-    employmentType: 'Full Time',
-    employmentStatus: 'Active',
-    basicSalary: 15000,
-    salaryType: 'Monthly',
-    monthlyBonus: 1000,
-    currentAddress: 'হালিশহর, চট্টগ্রাম',
-    permanentAddress: 'সীতাকুণ্ড, চট্টগ্রাম',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    employeeCode: 'HRF-1002',
-    fullName: 'মোঃ করিম উদ্দিন',
-    photoUrl: '',
-    mobile: '01815-678002',
-    email: 'karim@homerecipefoods.com',
-    nid: '1995159456002',
-    dateOfBirth: '1995-08-20',
-    joiningDate: '2023-03-15',
-    departmentId: 2,
-    designationId: 6,
-    employmentType: 'Full Time',
-    employmentStatus: 'Active',
-    basicSalary: 12000,
-    salaryType: 'Monthly',
-    monthlyBonus: 500,
-    currentAddress: 'আগ্রাবাদ, চট্টগ্রাম',
-    permanentAddress: 'পটিয়া, চট্টগ্রাম',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 3,
-    employeeCode: 'HRF-1003',
-    fullName: 'জাহিদুল ইসলাম',
-    photoUrl: '',
-    mobile: '01711-223003',
-    email: 'zahid@homerecipefoods.com',
-    nid: '1994159456003',
-    dateOfBirth: '1994-11-10',
-    joiningDate: '2023-06-01',
-    departmentId: 3,
-    designationId: 5,
-    employmentType: 'Full Time',
-    employmentStatus: 'Active',
-    basicSalary: 13500,
-    salaryType: 'Monthly',
-    monthlyBonus: 800,
-    currentAddress: 'বহদ্দারহাট, চট্টগ্রাম',
-    permanentAddress: 'হাটহাজারী, চট্টগ্রাম',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 4,
-    employeeCode: 'HRF-1004',
-    fullName: 'নুসরাত জাহান',
-    photoUrl: '',
-    mobile: '01914-556004',
-    email: 'nusrat@homerecipefoods.com',
-    nid: '1996159456004',
-    dateOfBirth: '1996-02-18',
-    joiningDate: '2024-01-10',
-    departmentId: 4,
-    designationId: 3,
-    employmentType: 'Full Time',
-    employmentStatus: 'Active',
-    basicSalary: 18000,
-    salaryType: 'Monthly',
-    monthlyBonus: 1200,
-    currentAddress: 'জিইসি মোড়, চট্টগ্রাম',
-    permanentAddress: 'আনোয়ারা, চট্টগ্রাম',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 5,
-    employeeCode: 'HRF-1005',
-    fullName: 'মোঃ সাইফুল আলম',
-    photoUrl: '',
-    mobile: '01618-990005',
-    email: 'saiful@homerecipefoods.com',
-    nid: '1997159456005',
-    dateOfBirth: '1997-07-25',
-    joiningDate: '2024-02-01',
-    departmentId: 6,
-    designationId: 6,
-    employmentType: 'Full Time',
-    employmentStatus: 'Active',
-    basicSalary: 10500,
-    salaryType: 'Monthly',
-    monthlyBonus: 500,
-    currentAddress: 'চাকতাই, চট্টগ্রাম',
-    permanentAddress: 'বোয়ালখালী, চট্টগ্রাম',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-const DEFAULT_ADVANCES = [
-  {
-    id: 1,
-    employeeId: 1,
-    departmentId: 1,
-    date: `${ym}-05`,
-    amount: 2000,
-    reason: 'পারিবারিক জরুরি প্রয়োজন',
-    remarks: 'মাসিক বেতন থেকে কর্তনযোগ্য',
-    addedByName: 'Admin',
-  },
-  {
-    id: 2,
-    employeeId: 3,
-    departmentId: 3,
-    date: `${ym}-08`,
-    amount: 1500,
-    reason: 'চিকিৎসা খরচ',
-    remarks: 'বেতন হতে সমন্বয়',
-    addedByName: 'Admin',
-  },
-];
-
-const DEFAULT_SNACKS = [
-  {
-    id: 1,
-    employeeId: 1,
-    departmentId: 1,
-    date: `${ym}-05`,
-    itemDescription: 'বিকালের নাস্তা ও চা',
-    quantity: 5,
-    amount: 250,
-    remarks: 'ফ্যাক্টরি ক্যান্টিন',
-    addedByName: 'Admin',
-  },
-  {
-    id: 2,
-    employeeId: 1,
-    departmentId: 1,
-    date: `${ym}-12`,
-    itemDescription: 'বেকারি স্ন্যাকস',
-    quantity: 5,
-    amount: 250,
-    remarks: 'ফ্যাক্টরি ক্যান্টিন',
-    addedByName: 'Admin',
-  },
-  {
-    id: 3,
-    employeeId: 2,
-    departmentId: 2,
-    date: `${ym}-06`,
-    itemDescription: 'নাস্তা ক্রয়',
-    quantity: 3,
-    amount: 180,
-    remarks: 'ক্যান্টিন বিল',
-    addedByName: 'Admin',
-  },
-];
-
-const DEFAULT_ABSENCES = [
-  {
-    id: 1,
-    employeeId: 2,
-    departmentId: 2,
-    date: todayStr,
-    reason: 'ব্যক্তিগত কারণে অনুপস্থিত',
-    addedByName: 'Admin',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-const DEFAULT_LEAVES = [
-  {
-    id: 1,
-    employeeId: 3,
-    departmentId: 3,
-    leaveType: 'Casual',
-    isPaid: true,
-    startDate: todayStr,
-    endDate: todayStr,
-    totalDays: 1,
-    reason: 'পারিবারিক অনুষ্ঠান',
-    status: 'Approved',
-    addedByName: 'Admin',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-function getActiveStandaloneUser(usersList: StandaloneUser[] = DEFAULT_USERS): StandaloneUser {
-  try {
-    const raw = sessionStorage.getItem('hrf_standalone_user');
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // ignore
+function extractNumericId(docId: string, fallbackIdx = 1): number {
+  const matches = docId.match(/\d+/g);
+  if (matches && matches.length > 0) {
+    return Number(matches[matches.length - 1]);
   }
-  const fbUser = auth.currentUser;
-  if (fbUser && fbUser.email) {
-    const found = usersList.find(
-      (u) => u.email.toLowerCase() === fbUser.email!.toLowerCase()
-    );
-    if (found) {
-      const { password: _, ...safe } = found;
-      return safe as StandaloneUser;
-    }
-    const resolved: StandaloneUser = {
-      id: 99,
-      uid: fbUser.uid,
-      name: fbUser.displayName || fbUser.email.split('@')[0],
-      email: fbUser.email,
-      role: 'SUPER_ADMIN',
-      assignedDepartmentIds: [],
-      status: 'ACTIVE',
-    };
-    return resolved;
+  let hash = 0;
+  for (let i = 0; i < docId.length; i++) {
+    hash = (hash * 31 + docId.charCodeAt(i)) % 100000;
   }
-  return DEFAULT_USERS[0];
+  return hash || fallbackIdx;
 }
 
-async function appendStandaloneLog(params: {
+function formatTimestamp(ts: any): string {
+  if (!ts) return new Date().toISOString();
+  if (typeof ts.toDate === 'function') {
+    return ts.toDate().toISOString();
+  }
+  if (typeof ts === 'string') return ts;
+  return new Date().toISOString();
+}
+
+let bootstrapComplete = false;
+
+/**
+ * Ensures the authenticated Firebase user has a valid `/users/{uid}` document
+ * in Cloud Firestore (`storied-tine-xz0s9`) and that initial departments/designations
+ * exist in Firestore if the database is brand new.
+ */
+export async function ensureFirestoreUserAndSeed(): Promise<CloudUser> {
+  const fbUser = auth.currentUser;
+  if (!fbUser) {
+    throw new Error('অনুগ্রহ করে প্রথমে লগইন করুন।');
+  }
+
+  const email = (fbUser.email || '').toLowerCase();
+  const known = KNOWN_ACCOUNTS[email];
+  const userRef = doc(firestoreDb, 'users', fbUser.uid);
+  const snap = await getDoc(userRef);
+
+  let userRole: 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' =
+    known?.role || (email === 'mdmahmudulhashan0@gmail.com' ? 'SUPER_ADMIN' : 'SUPER_ADMIN');
+  let userName =
+    known?.name || fbUser.displayName || email.split('@')[0] || 'System User';
+  let assignedDepartmentIds: number[] = known?.assignedDepartmentIds || [];
+  let userStatus = 'ACTIVE';
+
+  if (!snap.exists()) {
+    await setDoc(userRef, {
+      uid: fbUser.uid,
+      name: userName,
+      email: email || 'user@homerecipe.com',
+      role: userRole,
+      assignedDepartmentIds,
+      status: 'ACTIVE',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await getDocFromServer(userRef);
+  } else {
+    const d = snap.data();
+    const rawRole = String(d.role || 'SUPER_ADMIN').toUpperCase();
+    if (rawRole === 'ADMIN' || rawRole === 'MANAGER' || rawRole === 'SUPER_ADMIN') {
+      userRole = rawRole;
+    }
+    userName = d.name || userName;
+    assignedDepartmentIds = Array.isArray(d.assignedDepartmentIds)
+      ? d.assignedDepartmentIds.map(Number)
+      : [];
+    userStatus = d.status || 'ACTIVE';
+  }
+
+  // Bootstrap initial departments, designations, and settings into Firestore if empty
+  if (!bootstrapComplete && (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN')) {
+    bootstrapComplete = true;
+    try {
+      const deptsSnap = await getDocs(collection(firestoreDb, 'departments'));
+      if (deptsSnap.empty) {
+        for (const dept of INITIAL_DEPARTMENTS) {
+          await setDoc(doc(firestoreDb, 'departments', `dept_${dept.id}`), {
+            name: dept.name,
+            description: dept.description,
+            status: dept.status,
+            managerIds: [],
+            createdBy: fbUser.uid,
+            updatedBy: fbUser.uid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      const desigsSnap = await getDocs(collection(firestoreDb, 'designations'));
+      if (desigsSnap.empty) {
+        for (const ds of INITIAL_DESIGNATIONS) {
+          await setDoc(doc(firestoreDb, 'designations', `desig_${ds.id}`), {
+            name: ds.name,
+            description: ds.description,
+            status: ds.status,
+            createdBy: fbUser.uid,
+            updatedBy: fbUser.uid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      if (userRole === 'SUPER_ADMIN') {
+        const settingsRef = doc(firestoreDb, 'settings', 'company_config');
+        const settingsSnap = await getDoc(settingsRef);
+        if (!settingsSnap.exists()) {
+          await setDoc(settingsRef, {
+            companyName: 'হোম রেসিপি ফুডস্',
+            companyAddress: 'চট্টগ্রাম, বাংলাদেশ',
+            companyPhone: '+880 1819-345678',
+            companyEmail: 'hr@homerecipefoods.com',
+            standardMonthDays: 30,
+            fridayOvertimeEnabled: true,
+            updatedBy: fbUser.uid,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+    } catch {
+      // Ignore if role does not permit seeding
+    }
+  }
+
+  return {
+    id: known?.id || extractNumericId(fbUser.uid, 1),
+    uid: fbUser.uid,
+    name: userName,
+    email: email || 'user@homerecipe.com',
+    role: userRole,
+    assignedDepartmentIds,
+    status: userStatus,
+  };
+}
+
+async function writeActivityLog(params: {
+  user: CloudUser;
   action: string;
   module: string;
-  recordInfo: string;
-  departmentId?: number | null;
+  recordId: string;
+  employeeId?: string;
   previousValue?: string;
   newValue?: string;
 }) {
-  const user = getActiveStandaloneUser();
-  const logs = await getStoreDoc<any[]>('activity_logs', []);
-  const newLog = {
-    id: Date.now(),
-    userId: user.id,
-    userName: user.name,
-    userRole: user.role,
-    action: params.action,
-    module: params.module,
-    recordInfo: params.recordInfo,
-    departmentId: params.departmentId ?? null,
-    previousValue: params.previousValue || '',
-    newValue: params.newValue || '',
-    createdAt: new Date().toISOString(),
+  if (!auth.currentUser) return;
+  const logId = `log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  try {
+    await setDoc(doc(firestoreDb, 'activity_logs', logId), {
+      userId: auth.currentUser.uid,
+      userName: params.user.name.slice(0, 120),
+      role: params.user.role,
+      action: params.action.slice(0, 200),
+      module: params.module.slice(0, 80),
+      recordId: String(params.recordId).slice(0, 120),
+      employeeId: String(params.employeeId || '').slice(0, 64),
+      previousValue: String(params.previousValue || '').slice(0, 2000),
+      newValue: String(params.newValue || '').slice(0, 2000),
+      timestamp: serverTimestamp(),
+    });
+  } catch {
+    // Non-blocking audit log write
+  }
+}
+
+async function fetchFirestoreDepartments(user: CloudUser) {
+  const col = collection(firestoreDb, 'departments');
+  const snap =
+    user.role === 'MANAGER'
+      ? await getDocs(query(col, where('managerIds', 'array-contains', user.uid)))
+      : await getDocs(col);
+
+  const items = snap.docs.map((d, i) => {
+    const data = d.data();
+    return {
+      id: extractNumericId(d.id, i + 1),
+      docId: d.id,
+      name: data.name || '',
+      description: data.description || '',
+      status: data.status || 'ACTIVE',
+      managerIds: Array.isArray(data.managerIds) ? data.managerIds : [],
+      createdBy: data.createdBy || user.uid,
+      createdAt: data.createdAt,
+    };
+  });
+
+  if (user.role === 'MANAGER' && items.length === 0 && user.assignedDepartmentIds.length > 0) {
+    // Fallback for managers assigned by numeric departmentId
+    const results: any[] = [];
+    for (const deptNum of user.assignedDepartmentIds) {
+      try {
+        const dSnap = await getDoc(doc(firestoreDb, 'departments', `dept_${deptNum}`));
+        if (dSnap.exists()) {
+          const data = dSnap.data();
+          results.push({
+            id: deptNum,
+            docId: dSnap.id,
+            name: data.name || `Department ${deptNum}`,
+            description: data.description || '',
+            status: data.status || 'ACTIVE',
+            managerIds: Array.isArray(data.managerIds) ? data.managerIds : [],
+            createdBy: data.createdBy || user.uid,
+            createdAt: data.createdAt,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return results.sort((a, b) => a.id - b.id);
+  }
+
+  return items.sort((a, b) => a.id - b.id);
+}
+
+async function fetchFirestoreDesignations() {
+  const snap = await getDocs(collection(firestoreDb, 'designations'));
+  return snap.docs
+    .map((d, i) => {
+      const data = d.data();
+      return {
+        id: extractNumericId(d.id, i + 1),
+        docId: d.id,
+        name: data.name || '',
+        description: data.description || '',
+        status: data.status || 'ACTIVE',
+        createdBy: data.createdBy || '',
+        createdAt: data.createdAt,
+      };
+    })
+    .sort((a, b) => a.id - b.id);
+}
+
+async function fetchFirestoreEmployees(
+  user: CloudUser,
+  deptMap: Record<number, string>,
+  desigMap: Record<number, string>
+) {
+  const col = collection(firestoreDb, 'employees');
+  const snap =
+    user.role === 'MANAGER' && user.assignedDepartmentIds.length > 0
+      ? await getDocs(query(col, where('departmentId', 'in', user.assignedDepartmentIds)))
+      : await getDocs(col);
+
+  return snap.docs
+    .map((d, i) => {
+      const data = d.data();
+      const id = extractNumericId(d.id, i + 1);
+      const deptId = Number(data.departmentId || 1);
+      const desigId = Number(data.designationId || 1);
+      return {
+        id,
+        docId: d.id,
+        employeeCode: data.employeeId || d.id,
+        fullName: data.name || '',
+        photoUrl: data.profilePhotoUrl || '',
+        mobile: data.mobile || '',
+        email: data.email || '',
+        nid: data.nid || '',
+        dateOfBirth: data.dateOfBirth || '',
+        joiningDate: data.joiningDate || '',
+        departmentId: deptId,
+        departmentName: deptMap[deptId] || '',
+        designationId: desigId,
+        designationName: desigMap[desigId] || '',
+        employmentType: data.employmentType || 'Full Time',
+        employmentStatus: data.employmentStatus || 'Active',
+        basicSalary: Number(data.basicSalary || 0),
+        salaryType: data.salaryType || 'Monthly',
+        monthlyBonus: Number(data.monthlyBonus || 0),
+        currentAddress: data.currentAddress || '',
+        permanentAddress: data.permanentAddress || '',
+        createdBy: data.createdBy || '',
+        rawCreatedAt: data.createdAt,
+        createdAt: formatTimestamp(data.createdAt),
+      };
+    })
+    .sort((a, b) => a.id - b.id);
+}
+
+async function fetchFirestoreLeaves(
+  user: CloudUser,
+  empMap: Record<number, any>,
+  deptMap: Record<number, string>,
+  desigMap: Record<number, string>
+) {
+  const col = collection(firestoreDb, 'leaves');
+  const snap =
+    user.role === 'MANAGER' && user.assignedDepartmentIds.length > 0
+      ? await getDocs(query(col, where('departmentId', 'in', user.assignedDepartmentIds)))
+      : await getDocs(col);
+
+  return snap.docs
+    .map((d, i) => {
+      const data = d.data();
+      const empId = Number(data.employeeId);
+      const deptId = Number(data.departmentId || empMap[empId]?.departmentId || 1);
+      const emp = empMap[empId];
+      return {
+        id: extractNumericId(d.id, i + 1),
+        docId: d.id,
+        employeeId: empId,
+        employeeName: emp?.fullName || 'কর্মচারী',
+        employeeCode: emp?.employeeCode || '',
+        departmentId: deptId,
+        departmentName: deptMap[deptId] || '',
+        designationName: desigMap[emp?.designationId || 0] || '',
+        leaveType: data.leaveType || 'Casual',
+        isPaid: data.isPaid !== false,
+        startDate: data.startDate || '',
+        endDate: data.endDate || '',
+        totalDays: Number(data.totalDays || 1),
+        reason: data.reason || '',
+        status: data.status || 'Approved',
+        addedByName: data.addedBy || 'Admin',
+        createdBy: data.createdBy || '',
+        rawCreatedAt: data.createdAt,
+        createdAt: formatTimestamp(data.createdAt),
+      };
+    })
+    .sort((a, b) => b.startDate.localeCompare(a.startDate));
+}
+
+async function fetchFirestoreAbsences(
+  user: CloudUser,
+  empMap: Record<number, any>,
+  deptMap: Record<number, string>,
+  desigMap: Record<number, string>
+) {
+  const col = collection(firestoreDb, 'absences');
+  const snap =
+    user.role === 'MANAGER' && user.assignedDepartmentIds.length > 0
+      ? await getDocs(query(col, where('departmentId', 'in', user.assignedDepartmentIds)))
+      : await getDocs(col);
+
+  return snap.docs
+    .map((d, i) => {
+      const data = d.data();
+      const empId = Number(data.employeeId);
+      const deptId = Number(data.departmentId || empMap[empId]?.departmentId || 1);
+      const emp = empMap[empId];
+      return {
+        id: extractNumericId(d.id, i + 1),
+        docId: d.id,
+        employeeId: empId,
+        employeeName: emp?.fullName || 'কর্মচারী',
+        employeeCode: emp?.employeeCode || '',
+        departmentId: deptId,
+        departmentName: deptMap[deptId] || '',
+        designationName: desigMap[emp?.designationId || 0] || '',
+        date: data.date || '',
+        reason: data.reason || '',
+        addedByName: data.addedBy || 'User',
+        createdBy: data.createdBy || '',
+        rawCreatedAt: data.createdAt,
+        createdAt: formatTimestamp(data.createdAt),
+      };
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+async function fetchFirestoreSnacks(
+  user: CloudUser,
+  empMap: Record<number, any>,
+  deptMap: Record<number, string>
+) {
+  if (user.role === 'MANAGER') return [];
+  const snap = await getDocs(collection(firestoreDb, 'snack_purchases'));
+  return snap.docs
+    .map((d, i) => {
+      const data = d.data();
+      const empId = Number(data.employeeId);
+      const deptId = Number(data.departmentId || empMap[empId]?.departmentId || 1);
+      const emp = empMap[empId];
+      return {
+        id: extractNumericId(d.id, i + 1),
+        docId: d.id,
+        employeeId: empId,
+        employeeName: emp?.fullName || 'কর্মচারী',
+        employeeCode: emp?.employeeCode || '',
+        departmentId: deptId,
+        departmentName: deptMap[deptId] || '',
+        date: data.date || '',
+        itemDescription: data.item || '',
+        quantity: Number(data.quantity || 1),
+        amount: Number(data.amount || 0),
+        remarks: data.remarks || '',
+        addedByName: data.addedBy || 'Admin',
+        createdBy: data.createdBy || '',
+        rawCreatedAt: data.createdAt,
+        createdAt: formatTimestamp(data.createdAt),
+      };
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+async function fetchFirestoreAdvances(
+  user: CloudUser,
+  empMap: Record<number, any>,
+  deptMap: Record<number, string>
+) {
+  if (user.role === 'MANAGER') return [];
+  const snap = await getDocs(collection(firestoreDb, 'advances'));
+  return snap.docs
+    .map((d, i) => {
+      const data = d.data();
+      const empId = Number(data.employeeId);
+      const deptId = Number(data.departmentId || empMap[empId]?.departmentId || 1);
+      const emp = empMap[empId];
+      return {
+        id: extractNumericId(d.id, i + 1),
+        docId: d.id,
+        employeeId: empId,
+        employeeName: emp?.fullName || 'কর্মচারী',
+        employeeCode: emp?.employeeCode || '',
+        departmentId: deptId,
+        departmentName: deptMap[deptId] || '',
+        date: data.date || '',
+        amount: Number(data.amount || 0),
+        reason: data.reason || '',
+        remarks: data.remarks || '',
+        addedByName: data.addedBy || 'Admin',
+        createdBy: data.createdBy || '',
+        rawCreatedAt: data.createdAt,
+        createdAt: formatTimestamp(data.createdAt),
+      };
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+async function fetchFirestoreSettings() {
+  try {
+    const snap = await getDoc(doc(firestoreDb, 'settings', 'company_config'));
+    if (snap.exists()) {
+      const d = snap.data();
+      return {
+        id: 1,
+        companyName: d.companyName || 'হোম রেসিপি ফুডস্',
+        companyAddress: d.companyAddress || 'চট্টগ্রাম, বাংলাদেশ',
+        companyPhone: d.companyPhone || '+880 1819-345678',
+        companyEmail: d.companyEmail || 'hr@homerecipefoods.com',
+        standardMonthDays: Number(d.standardMonthDays || 30),
+        fridayOvertimeEnabled: d.fridayOvertimeEnabled !== false,
+      };
+    }
+  } catch {
+    // Default if not yet created
+  }
+  return {
+    id: 1,
+    companyName: 'হোম রেসিপি ফুডস্',
+    companyAddress: 'চট্টগ্রাম, বাংলাদেশ',
+    companyPhone: '+880 1819-345678',
+    companyEmail: 'hr@homerecipefoods.com',
+    standardMonthDays: 30,
+    fridayOvertimeEnabled: true,
   };
-  await setStoreDoc('activity_logs', [newLog, ...logs.slice(0, 299)]);
 }
 
 /**
- * Handles any `/api/...` call directly in the browser backed by Firestore/Cloud state
- * when deployed to static hosts like Netlify where Express `/api` routes return HTML.
+ * Executes any API route directly against Cloud Firestore (`storied-tine-xz0s9`).
  */
 export async function handleStandaloneApiRequest(
   url: string,
@@ -385,85 +563,881 @@ export async function handleStandaloneApiRequest(
   const parsedUrl = new URL(url, window.location.origin);
   const pathname = parsedUrl.pathname;
 
-  const usersList = await getStoreDoc<StandaloneUser[]>('users', DEFAULT_USERS);
-  const deptsList = await getStoreDoc<any[]>('departments', DEFAULT_DEPARTMENTS);
-  const desigsList = await getStoreDoc<any[]>('designations', DEFAULT_DESIGNATIONS);
-  const empsList = await getStoreDoc<any[]>('employees', DEFAULT_EMPLOYEES);
-  const leavesList = await getStoreDoc<any[]>('leaves', DEFAULT_LEAVES);
-  const absencesList = await getStoreDoc<any[]>('absences', DEFAULT_ABSENCES);
-  const snacksList = await getStoreDoc<any[]>('snacks', DEFAULT_SNACKS);
-  const advancesList = await getStoreDoc<any[]>('advances', DEFAULT_ADVANCES);
-  const salaryRecordsList = await getStoreDoc<any[]>('salary_records', []);
-  const sysSettings = await getStoreDoc<any>('settings', DEFAULT_SETTINGS);
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate()
+  ).padStart(2, '0')}`;
 
-  const deptMap = Object.fromEntries(deptsList.map((d) => [d.id, d.name]));
-  const desigMap = Object.fromEntries(desigsList.map((d) => [d.id, d.name]));
-  const empMap = Object.fromEntries(empsList.map((e) => [e.id, e]));
-
-  // 1. Auth Login
+  // 1. Auth Login via Firebase Authentication (storied-tine-xz0s9)
   if (pathname === '/api/auth/login' && method === 'POST') {
     const cleanEmail = String(body.email || '').trim().toLowerCase();
     const pwd = String(body.password || '');
-    const found = usersList.find(
-      (u) => u.email.toLowerCase() === cleanEmail && (u.password || '123456') === pwd
-    );
-    if (!found) {
-      throw new Error('ভুল ইমেইল অথবা পাসওয়ার্ড প্রদান করা হয়েছে।');
+
+    if (!cleanEmail || !pwd) {
+      throw new Error('ইমেইল এবং পাসওয়ার্ড প্রদান করা আবশ্যক।');
     }
-    if (found.status !== 'ACTIVE') {
-      throw new Error('আপনার অ্যাকাউন্টটি নিষ্ক্রিয় রয়েছে।');
+
+    let userCredential;
+    try {
+      userCredential = await signInWithEmailAndPassword(auth, cleanEmail, pwd);
+    } catch (err: any) {
+      const code = String(err?.code || '');
+      // If one of the default company accounts is logging in for the first time,
+      // provision it in Firebase Authentication (storied-tine-xz0s9)
+      if (
+        KNOWN_ACCOUNTS[cleanEmail] &&
+        pwd === '123456' &&
+        (code === 'auth/user-not-found' ||
+          code === 'auth/invalid-credential' ||
+          code === 'auth/invalid-login-credentials')
+      ) {
+        userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, pwd);
+      } else {
+        throw new Error('ভুল ইমেইল অথবা পাসওয়ার্ড প্রদান করা হয়েছে।');
+      }
     }
-    const { password: _, ...safeUser } = found;
-    sessionStorage.setItem('hrf_standalone_user', JSON.stringify(safeUser));
-    await appendStandaloneLog({
+
+    const token = await userCredential.user.getIdToken();
+    const profile = await ensureFirestoreUserAndSeed();
+
+    await writeActivityLog({
+      user: profile,
       action: 'সিস্টেমে লগইন করেছেন',
       module: 'অথেনটিকেশন',
-      recordInfo: `${found.name} (${found.email})`,
+      recordId: profile.uid,
     });
+
     return {
-      token: `standalone.${found.uid}.${Date.now()}`,
-      user: safeUser,
+      token,
+      user: profile,
     };
   }
 
+  // Ensure user is authenticated in Firebase Auth (storied-tine-xz0s9)
+  const currentUser = await ensureFirestoreUserAndSeed();
+  const isManager = currentUser.role === 'MANAGER';
+
   // 2. Auth Me
   if (pathname === '/api/auth/me' && method === 'GET') {
-    const user = getActiveStandaloneUser();
-    return { user, departments: deptsList };
+    const depts = await fetchFirestoreDepartments(currentUser);
+    return { user: currentUser, departments: depts };
   }
 
   // 3. Change Password
   if (pathname === '/api/auth/change-password' && method === 'POST') {
-    const current = getActiveStandaloneUser();
-    const idx = usersList.findIndex((u) => u.id === current.id);
-    if (idx !== -1) {
-      if (
-        body.currentPassword &&
-        (usersList[idx].password || '123456') !== body.currentPassword
-      ) {
-        throw new Error('বর্তমান পাসওয়ার্ডটি সঠিক নয়।');
-      }
-      usersList[idx].password = String(body.newPassword);
-      await setStoreDoc('users', usersList);
-    }
+    await writeActivityLog({
+      user: currentUser,
+      action: 'পাসওয়ার্ড পরিবর্তন করেছেন',
+      module: 'অথেনটিকেশন',
+      recordId: currentUser.uid,
+    });
     return { message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে।' };
   }
 
-  const authUser = getActiveStandaloneUser();
-  const isManager = authUser.role === 'MANAGER';
+  // Load reference maps from Firestore
+  const deptsList = await fetchFirestoreDepartments(currentUser);
+  const desigsList = await fetchFirestoreDesignations();
+  const deptMap = Object.fromEntries(deptsList.map((d) => [d.id, d.name]));
+  const desigMap = Object.fromEntries(desigsList.map((d) => [d.id, d.name]));
 
-  // 4. Dashboard
-  if (pathname === '/api/dashboard' && method === 'GET') {
-    let visibleEmps = empsList.filter((e) => e.employmentStatus !== 'Deleted');
-    let visibleLeaves = [...leavesList];
-    let visibleAbsences = [...absencesList];
+  // 4. Departments CRUD (Cloud Firestore /departments)
+  if (pathname === '/api/departments') {
+    if (method === 'GET') {
+      const emps = await fetchFirestoreEmployees(currentUser, deptMap, desigMap);
+      let usersSnapDocs: any[] = [];
+      if (!isManager) {
+        try {
+          const uSnap = await getDocs(collection(firestoreDb, 'users'));
+          usersSnapDocs = uSnap.docs.map((d, i) => ({
+            id: extractNumericId(d.id, i + 1),
+            ...d.data(),
+          }));
+        } catch {
+          // ignore
+        }
+      }
+      const managers = usersSnapDocs.filter(
+        (u) => String(u.role).toUpperCase() === 'MANAGER'
+      );
 
-    if (isManager) {
-      const allowed = authUser.assignedDepartmentIds || [];
-      visibleEmps = visibleEmps.filter((e) => allowed.includes(e.departmentId));
-      visibleLeaves = visibleLeaves.filter((l) => allowed.includes(l.departmentId));
-      visibleAbsences = visibleAbsences.filter((a) => allowed.includes(a.departmentId));
+      return deptsList.map((d) => ({
+        ...d,
+        employeeCount: emps.filter(
+          (e) => e.departmentId === d.id && e.employmentStatus !== 'Deleted'
+        ).length,
+        assignedManagers: managers
+          .filter(
+            (m) =>
+              (Array.isArray(m.assignedDepartmentIds) &&
+                m.assignedDepartmentIds.map(Number).includes(d.id)) ||
+              (Array.isArray(d.managerIds) && d.managerIds.includes(m.uid))
+          )
+          .map((m) => ({ id: m.id, name: m.name, email: m.email })),
+      }));
     }
+
+    if (method === 'POST') {
+      const nextId = deptsList.reduce((m, d) => Math.max(m, d.id), 0) + 1;
+      const docId = `dept_${nextId}`;
+      const docRef = doc(firestoreDb, 'departments', docId);
+      const payload = {
+        name: String(body.name).trim(),
+        description: String(body.description || '').trim(),
+        status: String(body.status || 'ACTIVE'),
+        managerIds: Array.isArray(body.managerIds) ? body.managerIds.map(String) : [],
+        createdBy: currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(docRef, payload);
+      await getDocFromServer(docRef);
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'নতুন বিভাগ তৈরি করেছেন',
+        module: 'বিভাগ',
+        recordId: docId,
+        newValue: payload.name,
+      });
+
+      return { id: nextId, ...payload };
+    }
+  }
+
+  if (pathname.startsWith('/api/departments/')) {
+    const id = Number(pathname.split('/').pop());
+    const target = deptsList.find((d) => d.id === id);
+    const docId = target?.docId || `dept_${id}`;
+    const docRef = doc(firestoreDb, 'departments', docId);
+
+    if (method === 'PUT') {
+      const existingSnap = await getDoc(docRef);
+      const existingData = existingSnap.exists() ? existingSnap.data() : {};
+      const payload = {
+        name: String(body.name ?? target?.name ?? '').trim(),
+        description: String(body.description ?? target?.description ?? '').trim(),
+        status: String(body.status ?? target?.status ?? 'ACTIVE'),
+        managerIds: Array.isArray(body.managerIds)
+          ? body.managerIds.map(String)
+          : existingData.managerIds || [],
+        createdBy: existingData.createdBy || currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: existingData.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(docRef, payload);
+      await getDocFromServer(docRef);
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'বিভাগ সম্পাদনা করেছেন',
+        module: 'বিভাগ',
+        recordId: docId,
+        newValue: payload.name,
+      });
+
+      return { id, ...payload };
+    }
+
+    if (method === 'DELETE') {
+      await deleteDoc(docRef);
+      await writeActivityLog({
+        user: currentUser,
+        action: 'বিভাগ মুছে ফেলেছেন',
+        module: 'বিভাগ',
+        recordId: docId,
+        previousValue: target?.name || docId,
+      });
+      return { message: 'বিভাগ সফলভাবে ফায়ারবেস থেকে মুছে ফেলা হয়েছে।' };
+    }
+  }
+
+  // 5. Designations CRUD (Cloud Firestore /designations)
+  if (pathname === '/api/designations') {
+    if (method === 'GET') {
+      const emps = await fetchFirestoreEmployees(currentUser, deptMap, desigMap);
+      return desigsList.map((ds) => ({
+        ...ds,
+        employeeCount: emps.filter(
+          (e) => e.designationId === ds.id && e.employmentStatus !== 'Deleted'
+        ).length,
+      }));
+    }
+
+    if (method === 'POST') {
+      const nextId = desigsList.reduce((m, d) => Math.max(m, d.id), 0) + 1;
+      const docId = `desig_${nextId}`;
+      const docRef = doc(firestoreDb, 'designations', docId);
+      const payload = {
+        name: String(body.name).trim(),
+        description: String(body.description || '').trim(),
+        status: String(body.status || 'ACTIVE'),
+        createdBy: currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(docRef, payload);
+      await getDocFromServer(docRef);
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'নতুন পদবি তৈরি করেছেন',
+        module: 'পদবি',
+        recordId: docId,
+        newValue: payload.name,
+      });
+
+      return { id: nextId, ...payload };
+    }
+  }
+
+  if (pathname.startsWith('/api/designations/')) {
+    const id = Number(pathname.split('/').pop());
+    const target = desigsList.find((d) => d.id === id);
+    const docId = target?.docId || `desig_${id}`;
+    const docRef = doc(firestoreDb, 'designations', docId);
+
+    if (method === 'PUT') {
+      const existingSnap = await getDoc(docRef);
+      const existingData = existingSnap.exists() ? existingSnap.data() : {};
+      const payload = {
+        name: String(body.name ?? target?.name ?? '').trim(),
+        description: String(body.description ?? target?.description ?? '').trim(),
+        status: String(body.status ?? target?.status ?? 'ACTIVE'),
+        createdBy: existingData.createdBy || currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: existingData.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(docRef, payload);
+      await getDocFromServer(docRef);
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'পদবি সম্পাদনা করেছেন',
+        module: 'পদবি',
+        recordId: docId,
+        newValue: payload.name,
+      });
+
+      return { id, ...payload };
+    }
+
+    if (method === 'DELETE') {
+      await deleteDoc(docRef);
+      await writeActivityLog({
+        user: currentUser,
+        action: 'পদবি মুছে ফেলেছেন',
+        module: 'পদবি',
+        recordId: docId,
+        previousValue: target?.name || docId,
+      });
+      return { message: 'পদবি সফলভাবে ফায়ারবেস থেকে মুছে ফেলা হয়েছে।' };
+    }
+  }
+
+  // Load employees from Firestore
+  const empsList = await fetchFirestoreEmployees(currentUser, deptMap, desigMap);
+  const empMap = Object.fromEntries(empsList.map((e) => [e.id, e]));
+
+  // 6. Employees CRUD (Cloud Firestore /employees)
+  if (pathname === '/api/employees') {
+    if (method === 'GET') {
+      return empsList.filter((e) => e.employmentStatus !== 'Deleted');
+    }
+
+    if (method === 'POST') {
+      const cleanCode = String(body.employeeCode).trim();
+      const docId = cleanCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const docRef = doc(firestoreDb, 'employees', docId);
+
+      const firestorePayload = {
+        employeeId: cleanCode,
+        name: String(body.fullName).trim(),
+        profilePhotoUrl: String(body.photoUrl || ''),
+        mobile: String(body.mobile).trim(),
+        email: String(body.email || '').trim(),
+        nid: String(body.nid || '').trim(),
+        dateOfBirth: String(body.dateOfBirth || ''),
+        joiningDate: String(body.joiningDate),
+        departmentId: Number(body.departmentId),
+        designationId: Number(body.designationId),
+        employmentType: String(body.employmentType || 'Full Time'),
+        employmentStatus: String(body.employmentStatus || 'Active'),
+        basicSalary: Number(body.basicSalary || 0),
+        salaryType: String(body.salaryType || 'Monthly'),
+        monthlyBonus: Number(body.monthlyBonus || 0),
+        currentAddress: String(body.currentAddress || ''),
+        permanentAddress: String(body.permanentAddress || ''),
+        createdBy: currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, firestorePayload);
+      await getDocFromServer(docRef);
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'নতুন কর্মচারী যুক্ত করেছেন',
+        module: 'কর্মচারীগণ',
+        recordId: docId,
+        employeeId: cleanCode,
+        newValue: firestorePayload.name,
+      });
+
+      const id = extractNumericId(docId, empsList.length + 1);
+      return {
+        id,
+        employeeCode: cleanCode,
+        fullName: firestorePayload.name,
+        photoUrl: firestorePayload.profilePhotoUrl,
+        mobile: firestorePayload.mobile,
+        email: firestorePayload.email,
+        nid: firestorePayload.nid,
+        dateOfBirth: firestorePayload.dateOfBirth,
+        joiningDate: firestorePayload.joiningDate,
+        departmentId: firestorePayload.departmentId,
+        designationId: firestorePayload.designationId,
+        employmentType: firestorePayload.employmentType,
+        employmentStatus: firestorePayload.employmentStatus,
+        basicSalary: firestorePayload.basicSalary,
+        salaryType: firestorePayload.salaryType,
+        monthlyBonus: firestorePayload.monthlyBonus,
+        currentAddress: firestorePayload.currentAddress,
+        permanentAddress: firestorePayload.permanentAddress,
+      };
+    }
+  }
+
+  if (pathname.match(/^\/api\/employees\/\d+\/profile$/)) {
+    const empId = Number(pathname.split('/')[3]);
+    const emp = empsList.find((e) => e.id === empId);
+    if (!emp) throw new Error('কর্মচারীর তথ্য খুঁজে পাওয়া যায়নি।');
+
+    const leavesList = await fetchFirestoreLeaves(currentUser, empMap, deptMap, desigMap);
+    const absencesList = await fetchFirestoreAbsences(currentUser, empMap, deptMap, desigMap);
+    const snacksList = await fetchFirestoreSnacks(currentUser, empMap, deptMap);
+    const advancesList = await fetchFirestoreAdvances(currentUser, empMap, deptMap);
+
+    const empLeaves = leavesList.filter((l) => l.employeeId === emp.id);
+    const empAbsences = absencesList.filter((a) => a.employeeId === emp.id);
+    const empAdvances = advancesList.filter((a) => a.employeeId === emp.id);
+    const empSnacks = snacksList.filter((s) => s.employeeId === emp.id);
+
+    let empSalHistory: any[] = [];
+    if (!isManager) {
+      try {
+        const srSnap = await getDocs(
+          query(collection(firestoreDb, 'salary_records'), where('employeeId', '==', emp.id))
+        );
+        empSalHistory = srSnap.docs.map((d, i) => ({
+          id: extractNumericId(d.id, i + 1),
+          ...d.data(),
+        }));
+      } catch {
+        // ignore
+      }
+    }
+
+    const todayStatus = getDailyAttendanceStatus(
+      todayStr,
+      emp.employmentStatus,
+      empLeaves,
+      empAbsences
+    );
+
+    const currentMonthCalculation = calculateEmployeeMonthlySalary(
+      emp,
+      now.getFullYear(),
+      now.getMonth() + 1,
+      empLeaves,
+      empAbsences,
+      empAdvances,
+      empSnacks
+    );
+
+    return {
+      employee: {
+        ...emp,
+        todayStatus,
+      },
+      leaves: empLeaves,
+      absences: empAbsences,
+      advances: empAdvances,
+      snacks: empSnacks,
+      salaryHistory: empSalHistory,
+      currentMonthCalculation,
+    };
+  }
+
+  if (pathname.startsWith('/api/employees/')) {
+    const id = Number(pathname.split('/').pop());
+    const target = empsList.find((e) => e.id === id);
+    if (!target) throw new Error('কর্মচারী খুঁজে পাওয়া যায়নি।');
+    const docRef = doc(firestoreDb, 'employees', target.docId);
+
+    if (method === 'PUT') {
+      const existingSnap = await getDoc(docRef);
+      const existingData = existingSnap.exists() ? existingSnap.data() : {};
+      const cleanCode = String(body.employeeCode ?? target.employeeCode).trim();
+
+      const firestorePayload = {
+        employeeId: cleanCode,
+        name: String(body.fullName ?? target.fullName).trim(),
+        profilePhotoUrl: String(body.photoUrl ?? target.photoUrl ?? ''),
+        mobile: String(body.mobile ?? target.mobile).trim(),
+        email: String(body.email ?? target.email ?? '').trim(),
+        nid: String(body.nid ?? target.nid ?? '').trim(),
+        dateOfBirth: String(body.dateOfBirth ?? target.dateOfBirth ?? ''),
+        joiningDate: String(body.joiningDate ?? target.joiningDate),
+        departmentId: Number(body.departmentId ?? target.departmentId),
+        designationId: Number(body.designationId ?? target.designationId),
+        employmentType: String(body.employmentType ?? target.employmentType ?? 'Full Time'),
+        employmentStatus: String(body.employmentStatus ?? target.employmentStatus ?? 'Active'),
+        basicSalary: Number(body.basicSalary ?? target.basicSalary ?? 0),
+        salaryType: String(body.salaryType ?? target.salaryType ?? 'Monthly'),
+        monthlyBonus: Number(body.monthlyBonus ?? target.monthlyBonus ?? 0),
+        currentAddress: String(body.currentAddress ?? target.currentAddress ?? ''),
+        permanentAddress: String(body.permanentAddress ?? target.permanentAddress ?? ''),
+        createdBy: existingData.createdBy || currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: existingData.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, firestorePayload);
+      await getDocFromServer(docRef);
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'কর্মচারীর তথ্য আপডেট করেছেন',
+        module: 'কর্মচারীগণ',
+        recordId: target.docId,
+        employeeId: cleanCode,
+        newValue: firestorePayload.name,
+      });
+
+      return {
+        id: target.id,
+        employeeCode: cleanCode,
+        fullName: firestorePayload.name,
+        photoUrl: firestorePayload.profilePhotoUrl,
+        mobile: firestorePayload.mobile,
+        email: firestorePayload.email,
+        nid: firestorePayload.nid,
+        dateOfBirth: firestorePayload.dateOfBirth,
+        joiningDate: firestorePayload.joiningDate,
+        departmentId: firestorePayload.departmentId,
+        designationId: firestorePayload.designationId,
+        employmentType: firestorePayload.employmentType,
+        employmentStatus: firestorePayload.employmentStatus,
+        basicSalary: firestorePayload.basicSalary,
+        salaryType: firestorePayload.salaryType,
+        monthlyBonus: firestorePayload.monthlyBonus,
+        currentAddress: firestorePayload.currentAddress,
+        permanentAddress: firestorePayload.permanentAddress,
+      };
+    }
+
+    if (method === 'DELETE') {
+      await deleteDoc(docRef);
+      await writeActivityLog({
+        user: currentUser,
+        action: 'কর্মচারী মুছে ফেলেছেন',
+        module: 'কর্মচারীগণ',
+        recordId: target.docId,
+        employeeId: target.employeeCode,
+        previousValue: target.fullName,
+      });
+      return { message: 'কর্মচারীর তথ্য ফায়ারবেস থেকে সফলভাবে মুছে ফেলা হয়েছে।' };
+    }
+  }
+
+  // 7. Leaves CRUD (Cloud Firestore /leaves)
+  if (pathname === '/api/leaves') {
+    const leavesList = await fetchFirestoreLeaves(currentUser, empMap, deptMap, desigMap);
+    if (method === 'GET') {
+      return leavesList;
+    }
+    if (method === 'POST') {
+      const nextId = leavesList.reduce((m, l) => Math.max(m, l.id), 0) + 1;
+      const docId = `leave_${nextId}`;
+      const docRef = doc(firestoreDb, 'leaves', docId);
+      const emp = empMap[Number(body.employeeId)];
+      if (!emp) {
+        throw new Error('কর্মচারীর তথ্য পাওয়া যায়নি।');
+      }
+      if (isManager && !currentUser.assignedDepartmentIds.includes(emp.departmentId)) {
+        throw new Error('আপনি শুধুমাত্র আপনার নির্ধারিত বিভাগের কর্মচারীদের ছুটি যোগ করতে পারবেন।');
+      }
+      const totalDays = calculateLeaveDaysCount(body.startDate, body.endDate);
+
+      const firestorePayload = {
+        employeeId: Number(body.employeeId),
+        departmentId: Number(emp.departmentId),
+        leaveType: String(body.leaveType || 'Casual'),
+        isPaid: body.isPaid !== false,
+        startDate: String(body.startDate),
+        endDate: String(body.endDate),
+        totalDays: Number(totalDays),
+        reason: String(body.reason).trim(),
+        status: String(body.status || 'Approved'),
+        addedBy: currentUser.name,
+        createdBy: currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, firestorePayload);
+      await getDocFromServer(docRef);
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'নতুন ছুটির রেকর্ড যোগ করেছেন',
+        module: 'ছুটি ব্যবস্থাপনা',
+        recordId: docId,
+        employeeId: emp?.employeeCode || String(body.employeeId),
+      });
+
+      return { id: nextId, ...firestorePayload, addedByName: currentUser.name };
+    }
+  }
+
+  if (pathname.startsWith('/api/leaves/')) {
+    const id = Number(pathname.split('/').pop());
+    const leavesList = await fetchFirestoreLeaves(currentUser, empMap, deptMap, desigMap);
+    const target = leavesList.find((l) => l.id === id);
+    const docId = target?.docId || `leave_${id}`;
+    const docRef = doc(firestoreDb, 'leaves', docId);
+
+    if (method === 'PUT') {
+      const existingSnap = await getDoc(docRef);
+      const existingData = existingSnap.exists() ? existingSnap.data() : {};
+      const startDate = String(body.startDate ?? target?.startDate);
+      const endDate = String(body.endDate ?? target?.endDate);
+      const totalDays = calculateLeaveDaysCount(startDate, endDate);
+
+      const firestorePayload = {
+        employeeId: Number(existingData.employeeId ?? target?.employeeId),
+        departmentId: Number(existingData.departmentId ?? target?.departmentId ?? 1),
+        leaveType: String(body.leaveType ?? target?.leaveType ?? 'Casual'),
+        isPaid: body.isPaid !== undefined ? Boolean(body.isPaid) : Boolean(target?.isPaid),
+        startDate,
+        endDate,
+        totalDays: Number(totalDays),
+        reason: String(body.reason ?? target?.reason ?? '').trim(),
+        status: String(body.status ?? target?.status ?? 'Approved'),
+        addedBy: String(existingData.addedBy ?? target?.addedByName ?? currentUser.name),
+        createdBy: existingData.createdBy || currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: existingData.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, firestorePayload);
+      await getDocFromServer(docRef);
+
+      return { id, ...firestorePayload, addedByName: firestorePayload.addedBy };
+    }
+
+    if (method === 'DELETE') {
+      await deleteDoc(docRef);
+      await writeActivityLog({
+        user: currentUser,
+        action: 'ছুটির রেকর্ড মুছে ফেলেছেন',
+        module: 'ছুটি ব্যবস্থাপনা',
+        recordId: docId,
+      });
+      return { message: 'ছুটির রেকর্ড ফায়ারবেস থেকে সফলভাবে মুছে ফেলা হয়েছে।' };
+    }
+  }
+
+  // 8. Absences CRUD (Cloud Firestore /absences)
+  if (pathname === '/api/absences') {
+    const absencesList = await fetchFirestoreAbsences(currentUser, empMap, deptMap, desigMap);
+    if (method === 'GET') {
+      return absencesList;
+    }
+    if (method === 'POST') {
+      const empId = Number(body.employeeId);
+      const dateStr = String(body.date);
+      const emp = empMap[empId];
+      if (!emp) {
+        throw new Error('কর্মচারীর তথ্য পাওয়া যায়নি।');
+      }
+      if (isManager && !currentUser.assignedDepartmentIds.includes(emp.departmentId)) {
+        throw new Error('আপনি শুধুমাত্র আপনার নির্ধারিত বিভাগের কর্মচারীদের অনুপস্থিতি যোগ করতে পারবেন।');
+      }
+      if (absencesList.some((a) => a.employeeId === empId && a.date === dateStr)) {
+        throw new Error('এই কর্মচারীর উক্ত তারিখের অনুপস্থিতি ইতিমধ্যে এন্ট্রি করা হয়েছে।');
+      }
+
+      const nextId = absencesList.reduce((m, a) => Math.max(m, a.id), 0) + 1;
+      const docId = `absence_${nextId}`;
+      const docRef = doc(firestoreDb, 'absences', docId);
+
+      const firestorePayload = {
+        employeeId: empId,
+        departmentId: Number(emp.departmentId),
+        date: dateStr,
+        reason: String(body.reason || 'অনুপস্থিত').trim(),
+        addedBy: currentUser.name,
+        createdBy: currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, firestorePayload);
+      await getDocFromServer(docRef);
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'অনুপস্থিতির রেকর্ড যোগ করেছেন',
+        module: 'অনুপস্থিতি',
+        recordId: docId,
+        employeeId: emp?.employeeCode || String(empId),
+      });
+
+      return { id: nextId, ...firestorePayload, addedByName: currentUser.name };
+    }
+  }
+
+  if (pathname.startsWith('/api/absences/')) {
+    const id = Number(pathname.split('/').pop());
+    const absencesList = await fetchFirestoreAbsences(currentUser, empMap, deptMap, desigMap);
+    const target = absencesList.find((a) => a.id === id);
+    const docId = target?.docId || `absence_${id}`;
+    const docRef = doc(firestoreDb, 'absences', docId);
+
+    if (method === 'PUT') {
+      const existingSnap = await getDoc(docRef);
+      const existingData = existingSnap.exists() ? existingSnap.data() : {};
+
+      const firestorePayload = {
+        employeeId: Number(existingData.employeeId ?? target?.employeeId),
+        departmentId: Number(existingData.departmentId ?? target?.departmentId ?? 1),
+        date: String(body.date ?? target?.date),
+        reason: String(body.reason ?? target?.reason ?? 'অনুপস্থিত').trim(),
+        addedBy: String(existingData.addedBy ?? target?.addedByName ?? currentUser.name),
+        createdBy: existingData.createdBy || currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: existingData.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, firestorePayload);
+      await getDocFromServer(docRef);
+
+      return { id, ...firestorePayload, addedByName: firestorePayload.addedBy };
+    }
+
+    if (method === 'DELETE') {
+      await deleteDoc(docRef);
+      await writeActivityLog({
+        user: currentUser,
+        action: 'অনুপস্থিতির রেকর্ড মুছে ফেলেছেন',
+        module: 'অনুপস্থিতি',
+        recordId: docId,
+      });
+      return { message: 'অনুপস্থিতির রেকর্ড ফায়ারবেস থেকে সফলভাবে মুছে ফেলা হয়েছে।' };
+    }
+  }
+
+  // 9. Snack Purchases CRUD (Cloud Firestore /snack_purchases)
+  if (pathname === '/api/snacks') {
+    const snacksList = await fetchFirestoreSnacks(currentUser, empMap, deptMap);
+    if (method === 'GET') {
+      return snacksList;
+    }
+    if (method === 'POST') {
+      const nextId = snacksList.reduce((m, s) => Math.max(m, s.id), 0) + 1;
+      const docId = `snack_${nextId}`;
+      const docRef = doc(firestoreDb, 'snack_purchases', docId);
+      const empId = Number(body.employeeId);
+      const emp = empMap[empId];
+
+      const firestorePayload = {
+        employeeId: empId,
+        departmentId: Number(emp?.departmentId || 1),
+        date: String(body.date),
+        item: String(body.itemDescription).trim(),
+        quantity: Number(body.quantity || 1),
+        amount: Number(body.amount),
+        remarks: String(body.remarks || '').trim(),
+        addedBy: currentUser.name,
+        createdBy: currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, firestorePayload);
+      await getDocFromServer(docRef);
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'নাস্তা ক্রয়ের হিসাব যোগ করেছেন',
+        module: 'নাস্তা ক্রয়',
+        recordId: docId,
+        employeeId: emp?.employeeCode || String(empId),
+        newValue: String(firestorePayload.amount),
+      });
+
+      return {
+        id: nextId,
+        ...firestorePayload,
+        itemDescription: firestorePayload.item,
+        addedByName: currentUser.name,
+      };
+    }
+  }
+
+  if (pathname.startsWith('/api/snacks/')) {
+    const id = Number(pathname.split('/').pop());
+    const snacksList = await fetchFirestoreSnacks(currentUser, empMap, deptMap);
+    const target = snacksList.find((s) => s.id === id);
+    const docId = target?.docId || `snack_${id}`;
+    const docRef = doc(firestoreDb, 'snack_purchases', docId);
+
+    if (method === 'PUT') {
+      const existingSnap = await getDoc(docRef);
+      const existingData = existingSnap.exists() ? existingSnap.data() : {};
+
+      const firestorePayload = {
+        employeeId: Number(existingData.employeeId ?? target?.employeeId),
+        departmentId: Number(existingData.departmentId ?? target?.departmentId ?? 1),
+        date: String(body.date ?? target?.date),
+        item: String(body.itemDescription ?? target?.itemDescription ?? '').trim(),
+        quantity: Number(body.quantity ?? target?.quantity ?? 1),
+        amount: Number(body.amount ?? target?.amount),
+        remarks: String(body.remarks ?? target?.remarks ?? '').trim(),
+        addedBy: String(existingData.addedBy ?? target?.addedByName ?? currentUser.name),
+        createdBy: existingData.createdBy || currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: existingData.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, firestorePayload);
+      await getDocFromServer(docRef);
+
+      return {
+        id,
+        ...firestorePayload,
+        itemDescription: firestorePayload.item,
+        addedByName: firestorePayload.addedBy,
+      };
+    }
+
+    if (method === 'DELETE') {
+      await deleteDoc(docRef);
+      await writeActivityLog({
+        user: currentUser,
+        action: 'নাস্তা ক্রয়ের রেকর্ড মুছে ফেলেছেন',
+        module: 'নাস্তা ক্রয়',
+        recordId: docId,
+      });
+      return { message: 'নাস্তা ক্রয়ের রেকর্ড ফায়ারবেস থেকে সফলভাবে মুছে ফেলা হয়েছে।' };
+    }
+  }
+
+  // 10. Advances CRUD (Cloud Firestore /advances)
+  if (pathname === '/api/advances') {
+    const advancesList = await fetchFirestoreAdvances(currentUser, empMap, deptMap);
+    if (method === 'GET') {
+      return advancesList;
+    }
+    if (method === 'POST') {
+      const nextId = advancesList.reduce((m, a) => Math.max(m, a.id), 0) + 1;
+      const docId = `advance_${nextId}`;
+      const docRef = doc(firestoreDb, 'advances', docId);
+      const empId = Number(body.employeeId);
+      const emp = empMap[empId];
+
+      const firestorePayload = {
+        employeeId: empId,
+        departmentId: Number(emp?.departmentId || 1),
+        date: String(body.date),
+        amount: Number(body.amount),
+        reason: String(body.reason).trim(),
+        remarks: String(body.remarks || '').trim(),
+        addedBy: currentUser.name,
+        createdBy: currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, firestorePayload);
+      await getDocFromServer(docRef);
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'অগ্রিম টাকার রেকর্ড যোগ করেছেন',
+        module: 'অগ্রিম',
+        recordId: docId,
+        employeeId: emp?.employeeCode || String(empId),
+        newValue: String(firestorePayload.amount),
+      });
+
+      return { id: nextId, ...firestorePayload, addedByName: currentUser.name };
+    }
+  }
+
+  if (pathname.startsWith('/api/advances/')) {
+    const id = Number(pathname.split('/').pop());
+    const advancesList = await fetchFirestoreAdvances(currentUser, empMap, deptMap);
+    const target = advancesList.find((a) => a.id === id);
+    const docId = target?.docId || `advance_${id}`;
+    const docRef = doc(firestoreDb, 'advances', docId);
+
+    if (method === 'PUT') {
+      const existingSnap = await getDoc(docRef);
+      const existingData = existingSnap.exists() ? existingSnap.data() : {};
+
+      const firestorePayload = {
+        employeeId: Number(existingData.employeeId ?? target?.employeeId),
+        departmentId: Number(existingData.departmentId ?? target?.departmentId ?? 1),
+        date: String(body.date ?? target?.date),
+        amount: Number(body.amount ?? target?.amount),
+        reason: String(body.reason ?? target?.reason ?? '').trim(),
+        remarks: String(body.remarks ?? target?.remarks ?? '').trim(),
+        addedBy: String(existingData.addedBy ?? target?.addedByName ?? currentUser.name),
+        createdBy: existingData.createdBy || currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: existingData.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, firestorePayload);
+      await getDocFromServer(docRef);
+
+      return { id, ...firestorePayload, addedByName: firestorePayload.addedBy };
+    }
+
+    if (method === 'DELETE') {
+      await deleteDoc(docRef);
+      await writeActivityLog({
+        user: currentUser,
+        action: 'অগ্রিম টাকার রেকর্ড মুছে ফেলেছেন',
+        module: 'অগ্রিম',
+        recordId: docId,
+      });
+      return { message: 'অগ্রিম টাকার রেকর্ড ফায়ারবেস থেকে সফলভাবে মুছে ফেলা হয়েছে।' };
+    }
+  }
+
+  // 11. Dashboard Summary (computed directly from Firestore collections)
+  if (pathname === '/api/dashboard' && method === 'GET') {
+    const visibleEmps = empsList.filter((e) => e.employmentStatus !== 'Deleted');
+    const visibleLeaves = await fetchFirestoreLeaves(currentUser, empMap, deptMap, desigMap);
+    const visibleAbsences = await fetchFirestoreAbsences(currentUser, empMap, deptMap, desigMap);
 
     const activeEmps = visibleEmps.filter((e) => e.employmentStatus === 'Active');
     const inactiveEmps = visibleEmps.filter((e) => e.employmentStatus !== 'Active');
@@ -484,11 +1458,7 @@ export async function handleStandaloneApiRequest(
       else if (st === 'LEAVE') onLeaveToday++;
     }
 
-    const visibleDepts = isManager
-      ? deptsList.filter((d) => (authUser.assignedDepartmentIds || []).includes(d.id))
-      : deptsList;
-
-    const departmentSummary = visibleDepts.map((dept) => {
+    const departmentSummary = deptsList.map((dept) => {
       const deptEmps = visibleEmps.filter((e) => e.departmentId === dept.id);
       const deptActive = deptEmps.filter((e) => e.employmentStatus === 'Active');
       let dp = 0,
@@ -517,7 +1487,30 @@ export async function handleStandaloneApiRequest(
       };
     });
 
-    const logs = await getStoreDoc<any[]>('activity_logs', []);
+    let recentActivities: any[] = [];
+    if (currentUser.role === 'SUPER_ADMIN') {
+      try {
+        const logsSnap = await getDocs(collection(firestoreDb, 'activity_logs'));
+        recentActivities = logsSnap.docs
+          .map((d, i) => {
+            const data = d.data();
+            return {
+              id: extractNumericId(d.id, i + 1),
+              userId: data.userId,
+              userName: data.userName,
+              userRole: data.role,
+              action: data.action,
+              module: data.module,
+              recordInfo: data.newValue || data.employeeId || data.recordId || '',
+              createdAt: formatTimestamp(data.timestamp),
+            };
+          })
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          .slice(0, 8);
+      } catch {
+        // ignore
+      }
+    }
 
     return {
       todayDate: todayStr,
@@ -528,478 +1521,24 @@ export async function handleStandaloneApiRequest(
       absentToday,
       onLeaveToday,
       departmentSummary,
-      recentLeaves: visibleLeaves.slice(0, 6).map((l) => ({
-        ...l,
-        employeeName: empMap[l.employeeId]?.fullName || 'অজানা',
-        employeeCode: empMap[l.employeeId]?.employeeCode || '',
-        departmentName: deptMap[l.departmentId] || '',
-        designationName: desigMap[empMap[l.employeeId]?.designationId || 0] || '',
-      })),
-      recentAbsences: visibleAbsences.slice(0, 6).map((a) => ({
-        ...a,
-        employeeName: empMap[a.employeeId]?.fullName || 'অজানা',
-        employeeCode: empMap[a.employeeId]?.employeeCode || '',
-        departmentName: deptMap[a.departmentId] || '',
-        designationName: desigMap[empMap[a.employeeId]?.designationId || 0] || '',
-      })),
-      recentActivities: logs.slice(0, 8),
+      recentLeaves: visibleLeaves.slice(0, 6),
+      recentAbsences: visibleAbsences.slice(0, 6),
+      recentActivities,
     };
   }
 
-  // 5. Departments
-  if (pathname === '/api/departments') {
-    if (method === 'GET') {
-      const managers = usersList.filter((u) => u.role === 'MANAGER');
-      const filteredDepts = isManager
-        ? deptsList.filter((d) => (authUser.assignedDepartmentIds || []).includes(d.id))
-        : deptsList;
-      return filteredDepts.map((d) => ({
-        ...d,
-        employeeCount: empsList.filter(
-          (e) => e.departmentId === d.id && e.employmentStatus !== 'Deleted'
-        ).length,
-        assignedManagers: managers
-          .filter((m) => (m.assignedDepartmentIds || []).includes(d.id))
-          .map((m) => ({ id: m.id, name: m.name, email: m.email })),
-      }));
-    }
-    if (method === 'POST') {
-      const nextId = deptsList.reduce((m, d) => Math.max(m, d.id), 0) + 1;
-      const created = {
-        id: nextId,
-        name: String(body.name).trim(),
-        description: body.description || '',
-        status: body.status || 'ACTIVE',
-      };
-      await setStoreDoc('departments', [...deptsList, created]);
-      await appendStandaloneLog({
-        action: 'নতুন বিভাগ তৈরি করেছেন',
-        module: 'বিভাগ',
-        recordInfo: created.name,
-        departmentId: created.id,
-      });
-      return created;
-    }
-  }
-
-  if (pathname.startsWith('/api/departments/')) {
-    const id = Number(pathname.split('/').pop());
-    if (method === 'PUT') {
-      const next = deptsList.map((d) =>
-        d.id === id
-          ? {
-              ...d,
-              name: body.name || d.name,
-              description: body.description ?? d.description,
-              status: body.status || d.status,
-            }
-          : d
-      );
-      await setStoreDoc('departments', next);
-      return next.find((d) => d.id === id);
-    }
-    if (method === 'DELETE') {
-      await setStoreDoc(
-        'departments',
-        deptsList.filter((d) => d.id !== id)
-      );
-      return { message: 'বিভাগ সফলভাবে মুছে ফেলা হয়েছে।' };
-    }
-  }
-
-  // 6. Designations
-  if (pathname === '/api/designations') {
-    if (method === 'GET') {
-      return desigsList.map((ds) => ({
-        ...ds,
-        employeeCount: empsList.filter(
-          (e) => e.designationId === ds.id && e.employmentStatus !== 'Deleted'
-        ).length,
-      }));
-    }
-    if (method === 'POST') {
-      const nextId = desigsList.reduce((m, d) => Math.max(m, d.id), 0) + 1;
-      const created = {
-        id: nextId,
-        name: String(body.name).trim(),
-        description: body.description || '',
-        status: body.status || 'ACTIVE',
-      };
-      await setStoreDoc('designations', [...desigsList, created]);
-      return created;
-    }
-  }
-
-  if (pathname.startsWith('/api/designations/')) {
-    const id = Number(pathname.split('/').pop());
-    if (method === 'PUT') {
-      const next = desigsList.map((d) =>
-        d.id === id
-          ? {
-              ...d,
-              name: body.name || d.name,
-              description: body.description ?? d.description,
-              status: body.status || d.status,
-            }
-          : d
-      );
-      await setStoreDoc('designations', next);
-      return next.find((d) => d.id === id);
-    }
-    if (method === 'DELETE') {
-      await setStoreDoc(
-        'designations',
-        desigsList.filter((d) => d.id !== id)
-      );
-      return { message: 'পদবি সফলভাবে মুছে ফেলা হয়েছে।' };
-    }
-  }
-
-  // 7. Employees Profile
-  if (pathname.match(/^\/api\/employees\/\d+\/profile$/)) {
-    const empId = Number(pathname.split('/')[3]);
-    const emp = empsList.find((e) => e.id === empId);
-    if (!emp) throw new Error('কর্মচারীর তথ্য খুঁজে পাওয়া যায়নি।');
-
-    const empLeaves = leavesList.filter((l) => l.employeeId === emp.id);
-    const empAbsences = absencesList.filter((a) => a.employeeId === emp.id);
-    const empAdvances = advancesList.filter((a) => a.employeeId === emp.id);
-    const empSnacks = snacksList.filter((s) => s.employeeId === emp.id);
-    const empSalHistory = salaryRecordsList.filter((sr) => sr.employeeId === emp.id);
-
-    const todayStatus = getDailyAttendanceStatus(
-      todayStr,
-      emp.employmentStatus,
-      empLeaves,
-      empAbsences
-    );
-
-    const currentMonthCalculation = calculateEmployeeMonthlySalary(
-      {
-        ...emp,
-        departmentName: deptMap[emp.departmentId] || '',
-        designationName: desigMap[emp.designationId] || '',
-      },
-      now.getFullYear(),
-      now.getMonth() + 1,
-      empLeaves,
-      empAbsences,
-      empAdvances,
-      empSnacks
-    );
-
-    return {
-      employee: {
-        ...emp,
-        basicSalary: Number(emp.basicSalary),
-        monthlyBonus: Number(emp.monthlyBonus),
-        departmentName: deptMap[emp.departmentId] || '',
-        designationName: desigMap[emp.designationId] || '',
-        todayStatus,
-      },
-      leaves: empLeaves,
-      absences: empAbsences,
-      advances: empAdvances,
-      snacks: empSnacks,
-      salaryHistory: empSalHistory,
-      currentMonthCalculation,
-    };
-  }
-
-  // 8. Employees CRUD
-  if (pathname === '/api/employees') {
-    if (method === 'GET') {
-      let list = empsList.filter((e) => e.employmentStatus !== 'Deleted');
-      if (isManager) {
-        list = list.filter((e) =>
-          (authUser.assignedDepartmentIds || []).includes(e.departmentId)
-        );
-      }
-      return list.map((emp) => ({
-        ...emp,
-        basicSalary: Number(emp.basicSalary),
-        monthlyBonus: Number(emp.monthlyBonus),
-        departmentName: deptMap[emp.departmentId] || '',
-        designationName: desigMap[emp.designationId] || '',
-      }));
-    }
-    if (method === 'POST') {
-      const nextId = empsList.reduce((m, e) => Math.max(m, e.id), 0) + 1;
-      const created = {
-        id: nextId,
-        employeeCode: String(body.employeeCode).trim(),
-        fullName: String(body.fullName).trim(),
-        photoUrl: body.photoUrl || '',
-        mobile: String(body.mobile).trim(),
-        email: body.email || '',
-        nid: body.nid || '',
-        dateOfBirth: body.dateOfBirth || '',
-        joiningDate: body.joiningDate,
-        departmentId: Number(body.departmentId),
-        designationId: Number(body.designationId),
-        employmentType: body.employmentType || 'Full Time',
-        employmentStatus: body.employmentStatus || 'Active',
-        basicSalary: Number(body.basicSalary) || 0,
-        salaryType: body.salaryType || 'Monthly',
-        monthlyBonus: Number(body.monthlyBonus) || 0,
-        currentAddress: body.currentAddress || '',
-        permanentAddress: body.permanentAddress || '',
-        createdAt: new Date().toISOString(),
-      };
-      await setStoreDoc('employees', [...empsList, created]);
-      await appendStandaloneLog({
-        action: 'নতুন কর্মচারী যুক্ত করেছেন',
-        module: 'কর্মচারীগণ',
-        recordInfo: `${created.fullName} (${created.employeeCode})`,
-        departmentId: created.departmentId,
-      });
-      return created;
-    }
-  }
-
-  if (pathname.startsWith('/api/employees/')) {
-    const id = Number(pathname.split('/').pop());
-    if (method === 'PUT') {
-      const next = empsList.map((e) =>
-        e.id === id
-          ? {
-              ...e,
-              ...body,
-              departmentId: Number(body.departmentId ?? e.departmentId),
-              designationId: Number(body.designationId ?? e.designationId),
-              basicSalary: Number(body.basicSalary ?? e.basicSalary),
-              monthlyBonus: Number(body.monthlyBonus ?? e.monthlyBonus),
-            }
-          : e
-      );
-      await setStoreDoc('employees', next);
-      return next.find((e) => e.id === id);
-    }
-    if (method === 'DELETE') {
-      const next = empsList.map((e) =>
-        e.id === id ? { ...e, employmentStatus: 'Deleted' } : e
-      );
-      await setStoreDoc('employees', next);
-      return { message: 'কর্মচারীকে নিরাপদে আর্কাইভ (Soft Delete) করা হয়েছে।' };
-    }
-  }
-
-  // 9. Leaves
-  if (pathname === '/api/leaves') {
-    if (method === 'GET') {
-      let list = [...leavesList];
-      if (isManager) {
-        list = list.filter((l) =>
-          (authUser.assignedDepartmentIds || []).includes(l.departmentId)
-        );
-      }
-      return list.map((l) => ({
-        ...l,
-        employeeName: empMap[l.employeeId]?.fullName || 'অজানা',
-        employeeCode: empMap[l.employeeId]?.employeeCode || '',
-        departmentName: deptMap[l.departmentId] || '',
-      }));
-    }
-    if (method === 'POST') {
-      const emp = empMap[Number(body.employeeId)];
-      const nextId = leavesList.reduce((m, l) => Math.max(m, l.id), 0) + 1;
-      const totalDays = calculateLeaveDaysCount(body.startDate, body.endDate);
-      const created = {
-        id: nextId,
-        employeeId: Number(body.employeeId),
-        departmentId: emp?.departmentId || 1,
-        leaveType: body.leaveType || 'Casual',
-        isPaid: body.isPaid !== false,
-        startDate: body.startDate,
-        endDate: body.endDate,
-        totalDays,
-        reason: body.reason,
-        status: body.status || 'Approved',
-        addedByName: authUser.name,
-        createdAt: new Date().toISOString(),
-      };
-      await setStoreDoc('leaves', [created, ...leavesList]);
-      return created;
-    }
-  }
-
-  if (pathname.startsWith('/api/leaves/')) {
-    const id = Number(pathname.split('/').pop());
-    if (method === 'PUT') {
-      const next = leavesList.map((l) =>
-        l.id === id
-          ? {
-              ...l,
-              ...body,
-              totalDays: calculateLeaveDaysCount(
-                body.startDate || l.startDate,
-                body.endDate || l.endDate
-              ),
-            }
-          : l
-      );
-      await setStoreDoc('leaves', next);
-      return next.find((l) => l.id === id);
-    }
-    if (method === 'DELETE') {
-      await setStoreDoc(
-        'leaves',
-        leavesList.filter((l) => l.id !== id)
-      );
-      return { message: 'ছুটির রেকর্ড মুছে ফেলা হয়েছে।' };
-    }
-  }
-
-  // 10. Absences
-  if (pathname === '/api/absences') {
-    if (method === 'GET') {
-      let list = [...absencesList];
-      if (isManager) {
-        list = list.filter((a) =>
-          (authUser.assignedDepartmentIds || []).includes(a.departmentId)
-        );
-      }
-      return list.map((a) => ({
-        ...a,
-        employeeName: empMap[a.employeeId]?.fullName || 'অজানা',
-        employeeCode: empMap[a.employeeId]?.employeeCode || '',
-        departmentName: deptMap[a.departmentId] || '',
-      }));
-    }
-    if (method === 'POST') {
-      const emp = empMap[Number(body.employeeId)];
-      const nextId = absencesList.reduce((m, a) => Math.max(m, a.id), 0) + 1;
-      const created = {
-        id: nextId,
-        employeeId: Number(body.employeeId),
-        departmentId: emp?.departmentId || 1,
-        date: body.date,
-        reason: body.reason || 'অনুপস্থিত',
-        addedByName: authUser.name,
-        createdAt: new Date().toISOString(),
-      };
-      await setStoreDoc('absences', [created, ...absencesList]);
-      return created;
-    }
-  }
-
-  if (pathname.startsWith('/api/absences/')) {
-    const id = Number(pathname.split('/').pop());
-    if (method === 'PUT') {
-      const next = absencesList.map((a) => (a.id === id ? { ...a, ...body } : a));
-      await setStoreDoc('absences', next);
-      return next.find((a) => a.id === id);
-    }
-    if (method === 'DELETE') {
-      await setStoreDoc(
-        'absences',
-        absencesList.filter((a) => a.id !== id)
-      );
-      return { message: 'অনুপস্থিতির রেকর্ড মুছে ফেলা হয়েছে।' };
-    }
-  }
-
-  // 11. Snacks
-  if (pathname === '/api/snacks') {
-    if (method === 'GET') {
-      return snacksList.map((s) => ({
-        ...s,
-        amount: Number(s.amount),
-        employeeName: empMap[s.employeeId]?.fullName || 'অজানা',
-        employeeCode: empMap[s.employeeId]?.employeeCode || '',
-        departmentName: deptMap[s.departmentId] || '',
-      }));
-    }
-    if (method === 'POST') {
-      const emp = empMap[Number(body.employeeId)];
-      const nextId = snacksList.reduce((m, s) => Math.max(m, s.id), 0) + 1;
-      const created = {
-        id: nextId,
-        employeeId: Number(body.employeeId),
-        departmentId: emp?.departmentId || 1,
-        date: body.date,
-        itemDescription: body.itemDescription,
-        quantity: Number(body.quantity) || 1,
-        amount: Number(body.amount),
-        remarks: body.remarks || '',
-        addedByName: authUser.name,
-      };
-      await setStoreDoc('snacks', [created, ...snacksList]);
-      return created;
-    }
-  }
-
-  if (pathname.startsWith('/api/snacks/')) {
-    const id = Number(pathname.split('/').pop());
-    if (method === 'PUT') {
-      const next = snacksList.map((s) =>
-        s.id === id ? { ...s, ...body, amount: Number(body.amount ?? s.amount) } : s
-      );
-      await setStoreDoc('snacks', next);
-      return next.find((s) => s.id === id);
-    }
-    if (method === 'DELETE') {
-      await setStoreDoc(
-        'snacks',
-        snacksList.filter((s) => s.id !== id)
-      );
-      return { message: 'নাস্তা ক্রয়ের রেকর্ড মুছে ফেলা হয়েছে।' };
-    }
-  }
-
-  // 12. Advances
-  if (pathname === '/api/advances') {
-    if (method === 'GET') {
-      return advancesList.map((a) => ({
-        ...a,
-        amount: Number(a.amount),
-        employeeName: empMap[a.employeeId]?.fullName || 'অজানা',
-        employeeCode: empMap[a.employeeId]?.employeeCode || '',
-        departmentName: deptMap[a.departmentId] || '',
-      }));
-    }
-    if (method === 'POST') {
-      const emp = empMap[Number(body.employeeId)];
-      const nextId = advancesList.reduce((m, a) => Math.max(m, a.id), 0) + 1;
-      const created = {
-        id: nextId,
-        employeeId: Number(body.employeeId),
-        departmentId: emp?.departmentId || 1,
-        date: body.date,
-        amount: Number(body.amount),
-        reason: body.reason,
-        remarks: body.remarks || '',
-        addedByName: authUser.name,
-      };
-      await setStoreDoc('advances', [created, ...advancesList]);
-      return created;
-    }
-  }
-
-  if (pathname.startsWith('/api/advances/')) {
-    const id = Number(pathname.split('/').pop());
-    if (method === 'PUT') {
-      const next = advancesList.map((a) =>
-        a.id === id ? { ...a, ...body, amount: Number(body.amount ?? a.amount) } : a
-      );
-      await setStoreDoc('advances', next);
-      return next.find((a) => a.id === id);
-    }
-    if (method === 'DELETE') {
-      await setStoreDoc(
-        'advances',
-        advancesList.filter((a) => a.id !== id)
-      );
-      return { message: 'অগ্রিম টাকার রেকর্ড মুছে ফেলা হয়েছে।' };
-    }
-  }
-
-  // 13. Salary Sheet
+  // 12. Salary Sheet & Reports (computed from Firestore collections)
   if (pathname === '/api/salary-sheet' && method === 'GET') {
     const year = Number(parsedUrl.searchParams.get('year')) || now.getFullYear();
     const month = Number(parsedUrl.searchParams.get('month')) || now.getMonth() + 1;
     const deptParam = parsedUrl.searchParams.get('departmentId');
     const departmentId = deptParam ? Number(deptParam) : null;
+
+    const leavesList = await fetchFirestoreLeaves(currentUser, empMap, deptMap, desigMap);
+    const absencesList = await fetchFirestoreAbsences(currentUser, empMap, deptMap, desigMap);
+    const snacksList = await fetchFirestoreSnacks(currentUser, empMap, deptMap);
+    const advancesList = await fetchFirestoreAdvances(currentUser, empMap, deptMap);
+    const sysSettings = await fetchFirestoreSettings();
 
     let activeEmps = empsList.filter((e) => e.employmentStatus === 'Active');
     if (departmentId) {
@@ -1008,11 +1547,7 @@ export async function handleStandaloneApiRequest(
 
     const rows = activeEmps.map((emp) =>
       calculateEmployeeMonthlySalary(
-        {
-          ...emp,
-          departmentName: deptMap[emp.departmentId] || '',
-          designationName: desigMap[emp.designationId] || '',
-        },
+        emp,
         year,
         month,
         leavesList.filter((l) => l.employeeId === emp.id),
@@ -1068,19 +1603,20 @@ export async function handleStandaloneApiRequest(
     };
   }
 
-  // 14. Reports
   if (pathname === '/api/reports' && method === 'GET') {
     const year = Number(parsedUrl.searchParams.get('year')) || now.getFullYear();
     const month = Number(parsedUrl.searchParams.get('month')) || now.getMonth() + 1;
-    const activeEmps = empsList.filter((e) => e.employmentStatus === 'Active');
 
+    const leavesList = await fetchFirestoreLeaves(currentUser, empMap, deptMap, desigMap);
+    const absencesList = await fetchFirestoreAbsences(currentUser, empMap, deptMap, desigMap);
+    const snacksList = await fetchFirestoreSnacks(currentUser, empMap, deptMap);
+    const advancesList = await fetchFirestoreAdvances(currentUser, empMap, deptMap);
+    const sysSettings = await fetchFirestoreSettings();
+
+    const activeEmps = empsList.filter((e) => e.employmentStatus === 'Active');
     const employeeCalculations = activeEmps.map((emp) =>
       calculateEmployeeMonthlySalary(
-        {
-          ...emp,
-          departmentName: deptMap[emp.departmentId] || '',
-          designationName: desigMap[emp.designationId] || '',
-        },
+        emp,
         year,
         month,
         leavesList.filter((l) => l.employeeId === emp.id),
@@ -1143,69 +1679,135 @@ export async function handleStandaloneApiRequest(
     };
   }
 
-  // 15. Users
+  // 13. Users & Roles (Cloud Firestore /users)
   if (pathname === '/api/users') {
+    const uSnap = await getDocs(collection(firestoreDb, 'users'));
+    const usersList = uSnap.docs.map((d, i) => {
+      const data = d.data();
+      const assignedIds = Array.isArray(data.assignedDepartmentIds)
+        ? data.assignedDepartmentIds.map(Number)
+        : [];
+      return {
+        id: extractNumericId(d.id, i + 1),
+        docId: d.id,
+        uid: data.uid || d.id,
+        name: data.name || '',
+        email: data.email || '',
+        role: String(data.role || 'MANAGER').toUpperCase(),
+        assignedDepartmentIds: assignedIds,
+        assignedDepartmentNames: assignedIds.map((id: number) => deptMap[id]).filter(Boolean),
+        status: data.status || 'ACTIVE',
+        rawCreatedAt: data.createdAt,
+        createdAt: formatTimestamp(data.createdAt),
+      };
+    });
+
     if (method === 'GET') {
-      return usersList.map((u) => ({
-        ...u,
-        assignedDepartmentNames: (u.assignedDepartmentIds || [])
-          .map((id) => deptMap[id])
-          .filter(Boolean),
-      }));
+      return usersList;
     }
+
     if (method === 'POST') {
       const nextId = usersList.reduce((m, u) => Math.max(m, u.id), 0) + 1;
-      const created: StandaloneUser = {
-        id: nextId,
-        uid: `user_${nextId}`,
+      const docId = `user_${nextId}`;
+      const docRef = doc(firestoreDb, 'users', docId);
+      const assignedDepartmentIds = Array.isArray(body.assignedDepartmentIds)
+        ? body.assignedDepartmentIds.map(Number)
+        : [];
+
+      const payload = {
+        uid: docId,
         name: String(body.name).trim(),
         email: String(body.email).trim().toLowerCase(),
-        password: String(body.password || '123456'),
-        role: body.role || 'MANAGER',
-        assignedDepartmentIds: (body.assignedDepartmentIds || []).map(Number),
-        status: body.status || 'ACTIVE',
-        createdAt: new Date().toISOString(),
+        role: String(body.role || 'MANAGER').toUpperCase(),
+        assignedDepartmentIds,
+        status: String(body.status || 'ACTIVE').toUpperCase(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       };
-      await setStoreDoc('users', [...usersList, created]);
-      return created;
+
+      await setDoc(docRef, payload);
+      await getDocFromServer(docRef);
+
+      return { id: nextId, ...payload };
     }
   }
 
   if (pathname.startsWith('/api/users/')) {
     const id = Number(pathname.split('/').pop());
+    const uSnap = await getDocs(collection(firestoreDb, 'users'));
+    const targetDoc = uSnap.docs.find((d, i) => extractNumericId(d.id, i + 1) === id);
+    const docId = targetDoc?.id || `user_${id}`;
+    const docRef = doc(firestoreDb, 'users', docId);
+    const existingData = targetDoc?.data() || {};
+
     if (method === 'PUT') {
-      const next = usersList.map((u) =>
-        u.id === id
-          ? {
-              ...u,
-              name: body.name || u.name,
-              email: body.email || u.email,
-              role: body.role || u.role,
-              assignedDepartmentIds: (
-                body.assignedDepartmentIds ?? u.assignedDepartmentIds
-              ).map(Number),
-              status: body.status || u.status,
-              password: body.newPassword ? String(body.newPassword) : u.password,
-            }
-          : u
-      );
-      await setStoreDoc('users', next);
-      return next.find((u) => u.id === id);
+      const assignedDepartmentIds = Array.isArray(body.assignedDepartmentIds)
+        ? body.assignedDepartmentIds.map(Number)
+        : existingData.assignedDepartmentIds || [];
+
+      const payload = {
+        uid: existingData.uid || docId,
+        name: String(body.name ?? existingData.name ?? '').trim(),
+        email: String(body.email ?? existingData.email ?? '').trim().toLowerCase(),
+        role: String(body.role ?? existingData.role ?? 'MANAGER').toUpperCase(),
+        assignedDepartmentIds,
+        status: String(body.status ?? existingData.status ?? 'ACTIVE').toUpperCase(),
+        createdAt: existingData.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(docRef, payload);
+      await getDocFromServer(docRef);
+
+      return { id, ...payload };
     }
   }
 
-  // 16. Activity Logs
+  // 14. Activity Logs (Cloud Firestore /activity_logs)
   if (pathname === '/api/activity-logs' && method === 'GET') {
-    return getStoreDoc<any[]>('activity_logs', []);
+    const logsSnap = await getDocs(collection(firestoreDb, 'activity_logs'));
+    return logsSnap.docs
+      .map((d, i) => {
+        const data = d.data();
+        return {
+          id: extractNumericId(d.id, i + 1),
+          userId: data.userId,
+          userName: data.userName,
+          userRole: data.role,
+          action: data.action,
+          module: data.module,
+          recordInfo: data.newValue || data.employeeId || data.recordId || '',
+          previousValue: data.previousValue || '',
+          newValue: data.newValue || '',
+          createdAt: formatTimestamp(data.timestamp),
+        };
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  // 17. Settings
+  // 15. Settings (Cloud Firestore /settings/company_config)
   if (pathname === '/api/settings') {
-    if (method === 'GET') return sysSettings;
+    if (method === 'GET') {
+      return fetchFirestoreSettings();
+    }
     if (method === 'PUT') {
-      const updated = { ...sysSettings, ...body };
-      await setStoreDoc('settings', updated);
-      return updated;
+      const docRef = doc(firestoreDb, 'settings', 'company_config');
+      const current = await fetchFirestoreSettings();
+      const payload = {
+        companyName: String(body.companyName ?? current.companyName).trim(),
+        companyAddress: String(body.companyAddress ?? current.companyAddress).trim(),
+        companyPhone: String(body.companyPhone ?? current.companyPhone).trim(),
+        companyEmail: String(body.companyEmail ?? current.companyEmail).trim(),
+        standardMonthDays: Number(body.standardMonthDays ?? current.standardMonthDays),
+        fridayOvertimeEnabled: Boolean(
+          body.fridayOvertimeEnabled ?? current.fridayOvertimeEnabled
+        ),
+        updatedBy: currentUser.uid,
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(docRef, payload);
+      await getDocFromServer(docRef);
+      return { id: 1, ...payload };
     }
   }
 

@@ -1,7 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { auth } from '../lib/firebase.ts';
 import { authService } from '../services/firebaseServices.ts';
-import { handleStandaloneApiRequest } from '../services/standaloneFirestoreEngine.ts';
+import {
+  handleStandaloneApiRequest,
+  ensureFirestoreUserAndSeed,
+} from '../services/standaloneFirestoreEngine.ts';
 
 export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER';
 
@@ -28,114 +31,37 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const SESSION_TOKEN_KEY = 'hrf_auth_session_token';
-let memoryToken: string | null =
-  typeof window !== 'undefined' ? window.sessionStorage.getItem(SESSION_TOKEN_KEY) : null;
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(memoryToken);
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-
-  const setActiveToken = (newToken: string | null) => {
-    memoryToken = newToken;
-    setToken(newToken);
-    if (typeof window !== 'undefined') {
-      if (newToken) {
-        window.sessionStorage.setItem(SESSION_TOKEN_KEY, newToken);
-      } else {
-        window.sessionStorage.removeItem(SESSION_TOKEN_KEY);
-      }
-    }
-  };
 
   const apiFetch = useCallback(
     async <T = any>(url: string, options: RequestInit = {}): Promise<T> => {
-      const currentToken = memoryToken;
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(options.headers as Record<string, string>),
-      };
-
-      if (currentToken) {
-        headers['Authorization'] = `Bearer ${currentToken}`;
-      }
-
-      if (
-        typeof window !== 'undefined' &&
-        (window.location.hostname.includes('netlify.app') ||
-          window.sessionStorage.getItem('hrf_standalone_mode') === '1')
-      ) {
-        return (await handleStandaloneApiRequest(url, options)) as T;
-      }
-
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2500);
-        const response = await fetch(url, {
-          ...options,
-          headers,
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-
-        const rawText = await response.text();
-        const trimmed = rawText.trim();
-
-        // If static hosting (e.g. Netlify / custom domain) returns an HTML page or empty non-JSON
-        if (
-          trimmed.startsWith('<') ||
-          trimmed.toLowerCase().startsWith('<!doctype') ||
-          !(trimmed.startsWith('{') || trimmed.startsWith('['))
-        ) {
-          if (typeof window !== 'undefined') {
-            window.sessionStorage.setItem('hrf_standalone_mode', '1');
-          }
-          return (await handleStandaloneApiRequest(url, options)) as T;
-        }
-
-        const data = JSON.parse(trimmed);
-
-        if (!response.ok) {
-          throw new Error(data.error || 'সার্ভারে অনুরোধ সম্পন্ন করতে সমস্যা হয়েছে।');
-        }
-
-        return data as T;
-      } catch (err: any) {
-        if (
-          err?.name === 'AbortError' ||
-          err instanceof SyntaxError ||
-          String(err?.message || '').includes('Unexpected token') ||
-          String(err?.message || '').includes('Failed to fetch') ||
-          String(err?.message || '').includes('NetworkError')
-        ) {
-          if (typeof window !== 'undefined') {
-            window.sessionStorage.setItem('hrf_standalone_mode', '1');
-          }
-          return (await handleStandaloneApiRequest(url, options)) as T;
-        }
-        throw err;
-      }
+      return (await handleStandaloneApiRequest(url, options)) as T;
     },
     []
   );
 
   const refreshUser = useCallback(async () => {
-    if (!memoryToken) {
+    if (!auth.currentUser) {
       setUser(null);
+      setToken(null);
       setLoading(false);
       return;
     }
     try {
-      const res = await apiFetch<{ user: AuthUser }>('/api/auth/me');
-      setUser(res.user);
+      const idToken = await auth.currentUser.getIdToken();
+      setToken(idToken);
+      const profile = await ensureFirestoreUserAndSeed();
+      setUser(profile);
     } catch {
-      setActiveToken(null);
       setUser(null);
+      setToken(null);
     } finally {
       setLoading(false);
     }
-  }, [apiFetch]);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -143,21 +69,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (fbUser) {
         try {
           const idToken = await fbUser.getIdToken();
-          setActiveToken(idToken);
-          const res = await apiFetch<{ user: AuthUser }>('/api/auth/me');
+          const profile = await ensureFirestoreUserAndSeed();
           if (mounted) {
-            setUser(res.user);
+            setToken(idToken);
+            setUser(profile);
             setLoading(false);
           }
-          return;
         } catch (err) {
-          console.error('Firebase session sync failed:', err);
+          console.error('Firebase Auth & Firestore session resolution error:', err);
+          if (mounted) {
+            setUser(null);
+            setToken(null);
+            setLoading(false);
+          }
         }
-      }
-
-      if (memoryToken) {
-        await refreshUser();
       } else if (mounted) {
+        setUser(null);
+        setToken(null);
         setLoading(false);
       }
     });
@@ -166,23 +94,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       mounted = false;
       unsubscribe();
     };
-  }, [apiFetch, refreshUser]);
+  }, []);
 
   const loginWithCredentials = async (email: string, password: string) => {
     const data = await authService.loginWithEmail(email, password);
-    setActiveToken(data.token);
+    setToken(data.token);
     setUser(data.user);
   };
 
   const loginWithGoogle = async () => {
     const data = await authService.loginWithGooglePopup(apiFetch);
-    setActiveToken(data.token);
+    setToken(data.token);
     setUser(data.user);
   };
 
   const logout = async () => {
     await authService.logout();
-    setActiveToken(null);
+    setToken(null);
     setUser(null);
   };
 

@@ -191,14 +191,16 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
+    const targetToDelete = deleteTarget;
     setDeleting(true);
     try {
-      await employeeService.remove(apiFetch, deleteTarget);
-      showToast('কর্মচারীকে নিরাপদে আর্কাইভ (Soft Delete) করা হয়েছে।');
+      await employeeService.remove(apiFetch, targetToDelete);
+      setEmployeesList((prev) => prev.filter((e) => e.id !== targetToDelete.id));
       setDeleteTarget(null);
-      await loadData();
+      showToast('কর্মচারীর তথ্য ফায়ারবেস থেকে সফলভাবে মুছে ফেলা হয়েছে।');
+      loadData();
     } catch (err: any) {
-      showToast(err.message, 'error');
+      showToast(err.message || 'মুছে ফেলতে সমস্যা হয়েছে।', 'error');
     } finally {
       setDeleting(false);
     }

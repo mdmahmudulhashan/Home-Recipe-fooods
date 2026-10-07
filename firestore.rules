@@ -24,11 +24,14 @@ service cloud.firestore {
     }
 
     function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        request.auth.token.firebase.sign_in_provider != 'google.com'
+      );
     }
 
     function isBootstrappedSuperAdmin() {
-      return isVerifiedUser() && request.auth.token.email == 'mdmahmudulhashan0@gmail.com';
+      return isSignedIn() && request.auth.token.email == 'mdmahmudulhashan0@gmail.com';
     }
 
     function userDocPath() {
@@ -346,11 +349,13 @@ service cloud.firestore {
     // Prevents privilege escalation, Manager self-role/dept change, and Admin modifying Super Admin
     // =========================================================================
     match /users/{userId} {
-      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isSuperAdmin());
-      allow list: if isSignedIn() && (existing().uid == request.auth.uid || isSuperAdmin());
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdminOrSuper());
+      allow list: if isSignedIn() && (existing().uid == request.auth.uid || isAdminOrSuper());
       allow create: if isVerifiedUser() && isValidId(userId) && isValidUser(incoming()) &&
-        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
-        isSuperAdmin();
+        incoming().createdAt == request.time && incoming().updatedAt == request.time && (
+          isSuperAdmin() ||
+          (request.auth.uid == userId && !exists(/databases/$(database)/documents/users/$(request.auth.uid)))
+        );
       allow update: if isVerifiedUser() && isValidId(userId) && isValidUser(incoming()) &&
         incoming().uid == existing().uid &&
         incoming().createdAt == existing().createdAt &&
@@ -406,8 +411,8 @@ service cloud.firestore {
     // COLLECTION 4: /designations/{designationId}
     // =========================================================================
     match /designations/{designationId} {
-      allow get: if isSignedIn() && isValidId(designationId) && isAdminOrSuper();
-      allow list: if isSignedIn() && (existing().status in ['ACTIVE', 'INACTIVE', 'active', 'inactive']) && isAdminOrSuper();
+      allow get: if isSignedIn() && isValidId(designationId) && (isAdminOrSuper() || hasActiveUserDoc());
+      allow list: if isSignedIn() && (existing().status in ['ACTIVE', 'INACTIVE', 'active', 'inactive']) && (isAdminOrSuper() || hasActiveUserDoc());
       allow create: if isVerifiedUser() && isValidId(designationId) && isValidDesignation(incoming()) &&
         incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
         incoming().createdAt == request.time && incoming().updatedAt == request.time &&
@@ -440,11 +445,12 @@ service cloud.firestore {
           'monthlyBonus', 'currentAddress', 'permanentAddress', 'updatedBy', 'updatedAt'
         ]) &&
         isAdminOrSuper();
-      allow delete: if isVerifiedUser() && isValidId(employeeDocId) && isSuperAdmin();
+      allow delete: if isVerifiedUser() && isValidId(employeeDocId) && isAdminOrSuper();
     }
 
     // =========================================================================
     // COLLECTION 6: /leaves/{leaveId}
+    // Managers can create leave records for their assigned departments
     // =========================================================================
     match /leaves/{leaveId} {
       allow get: if isSignedIn() && isValidId(leaveId) && (isAdminOrSuper() || isManagerForDept(existing().departmentId));
@@ -452,14 +458,14 @@ service cloud.firestore {
       allow create: if isVerifiedUser() && isValidId(leaveId) && isValidLeave(incoming()) &&
         incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
         incoming().createdAt == request.time && incoming().updatedAt == request.time &&
-        isAdminOrSuper();
+        (isAdminOrSuper() || isManagerForDept(incoming().departmentId));
       allow update: if isVerifiedUser() && isValidId(leaveId) && isValidLeave(incoming()) &&
         incoming().createdBy == existing().createdBy && incoming().createdAt == existing().createdAt &&
         incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly([
           'leaveType', 'isPaid', 'startDate', 'endDate', 'totalDays', 'reason', 'status', 'updatedBy', 'updatedAt'
         ]) &&
-        isAdminOrSuper();
+        (isAdminOrSuper() || isManagerForDept(existing().departmentId));
       allow delete: if isVerifiedUser() && isValidId(leaveId) && isAdminOrSuper();
     }
 
@@ -575,8 +581,8 @@ service cloud.firestore {
     // COLLECTION 13: /settings/{settingId} (Super Admin Only Writes, Blocked for Managers)
     // =========================================================================
     match /settings/{settingId} {
-      allow get: if isSignedIn() && isValidId(settingId) && isAdminOrSuper();
-      allow list: if isSignedIn() && existing().standardMonthDays >= 28 && isAdminOrSuper();
+      allow get: if isSignedIn() && isValidId(settingId) && (isAdminOrSuper() || hasActiveUserDoc());
+      allow list: if isSignedIn() && existing().standardMonthDays >= 28 && (isAdminOrSuper() || hasActiveUserDoc());
       allow create: if isVerifiedUser() && isValidId(settingId) && isValidSettings(incoming()) &&
         incoming().updatedBy == request.auth.uid && incoming().updatedAt == request.time &&
         isSuperAdmin();
