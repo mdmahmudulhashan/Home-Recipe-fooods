@@ -28,6 +28,7 @@ const initialForm = {
   fullName: '',
   photoUrl: '',
   mobile: '',
+  emergencyContact: '',
   email: '',
   nid: '',
   dateOfBirth: '',
@@ -106,6 +107,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
             emp.fullName.toLowerCase().includes(q) ||
             emp.employeeCode.toLowerCase().includes(q) ||
             emp.mobile.toLowerCase().includes(q) ||
+            (emp.emergencyContact && emp.emergencyContact.toLowerCase().includes(q)) ||
             (emp.nid && emp.nid.toLowerCase().includes(q));
           if (!match) return false;
         }
@@ -152,6 +154,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       fullName: emp.fullName,
       photoUrl: emp.photoUrl || '',
       mobile: emp.mobile,
+      emergencyContact: emp.emergencyContact || '',
       email: emp.email || '',
       nid: emp.nid || '',
       dateOfBirth: emp.dateOfBirth || '',
@@ -531,6 +534,20 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                     required
                     value={formData.mobile}
                     onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono-num"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    জরুরী যোগাযোগ (Emergency Contact)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.emergencyContact}
+                    onChange={(e) =>
+                      setFormData({ ...formData, emergencyContact: e.target.value })
+                    }
+                    placeholder="জরুরী যোগাযোগের নম্বর / তথ্য"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono-num"
                   />
                 </div>

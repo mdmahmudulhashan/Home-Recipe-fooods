@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.tsx';
 import { getLeaveTypeLabel } from '../utils/formatters.ts';
-import { calculateLeaveDaysCount, isFridayDate } from '../shared/salaryEngine.ts';
+import { calculateLeaveDaysCount, getDatesBetween, isFridayDate } from '../shared/salaryEngine.ts';
 import { ConfirmDialog } from '../components/ConfirmDialog.tsx';
 import {
   leaveService,
@@ -471,6 +471,7 @@ export const AbsencesView: React.FC<AttendanceProps> = ({ onSelectEmployee, show
   const [editingId, setEditingId] = useState<number | null>(null);
   const [employeeId, setEmployeeId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [reason, setReason] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
@@ -505,6 +506,16 @@ export const AbsencesView: React.FC<AttendanceProps> = ({ onSelectEmployee, show
     });
   }, [absencesList, deptFilter, empFilter, dateFilter]);
 
+  const computedAbsenceDays = editingId ? 1 : calculateLeaveDaysCount(date, endDate);
+  const rangeDates = useMemo(
+    () => (editingId ? [date] : getDatesBetween(date, endDate)),
+    [editingId, date, endDate]
+  );
+  const hasFridayInRange = useMemo(
+    () => rangeDates.some((dStr) => isFridayDate(dStr)),
+    [rangeDates]
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -515,9 +526,15 @@ export const AbsencesView: React.FC<AttendanceProps> = ({ onSelectEmployee, show
         await absenceService.create(apiFetch, {
           employeeId: Number(employeeId),
           date,
+          startDate: date,
+          endDate: endDate || date,
           reason: reason || 'অনুপস্থিত',
         });
-        showToast('অনুপস্থিতি সফলভাবে লিপিবদ্ধ করা হয়েছে।');
+        showToast(
+          computedAbsenceDays > 1
+            ? `টানা ${computedAbsenceDays} দিনের অনুপস্থিতি সফলভাবে লিপিবদ্ধ করা হয়েছে।`
+            : 'অনুপস্থিতি সফলভাবে লিপিবদ্ধ করা হয়েছে।'
+        );
       }
       setModalOpen(false);
       await loadData();
@@ -553,9 +570,11 @@ export const AbsencesView: React.FC<AttendanceProps> = ({ onSelectEmployee, show
           </div>
           <button
             onClick={() => {
+              const today = new Date().toISOString().split('T')[0];
               setEditingId(null);
               setEmployeeId(employeesList[0]?.id ? String(employeesList[0].id) : '');
-              setDate(new Date().toISOString().split('T')[0]);
+              setDate(today);
+              setEndDate(today);
               setReason('ব্যক্তিগত কারণে অনুপস্থিত');
               setModalOpen(true);
             }}
@@ -678,6 +697,7 @@ export const AbsencesView: React.FC<AttendanceProps> = ({ onSelectEmployee, show
                                 setEditingId(ab.id);
                                 setEmployeeId(String(ab.employeeId));
                                 setDate(ab.date);
+                                setEndDate(ab.date);
                                 setReason(ab.reason);
                                 setModalOpen(true);
                               }}
@@ -734,21 +754,72 @@ export const AbsencesView: React.FC<AttendanceProps> = ({ onSelectEmployee, show
                 </div>
               )}
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">তারিখ *</label>
-                <input
-                  type="date"
-                  required
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono-num"
-                />
-                {isFridayDate(date) && (
-                  <p className="text-[11px] text-amber-700 mt-1">
-                    নির্বাচিত তারিখটি শুক্রবার। এই তারিখে অনুপস্থিত থাকলে উক্ত কর্মচারীর ১টি শুক্রবারের ওভারটাইম কমে যাবে।
-                  </p>
-                )}
-              </div>
+              {editingId ? (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">তারিখ *</label>
+                  <input
+                    type="date"
+                    required
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono-num"
+                  />
+                  {isFridayDate(date) && (
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      নির্বাচিত তারিখটি শুক্রবার। এই তারিখে অনুপস্থিত থাকলে উক্ত কর্মচারীর ১টি শুক্রবারের ওভারটাইম কমে যাবে।
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">
+                        শুরুর তারিখ *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={date}
+                        onChange={(e) => {
+                          const nextStart = e.target.value;
+                          setDate(nextStart);
+                          if (!endDate || endDate < nextStart) {
+                            setEndDate(nextStart);
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono-num"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">
+                        শেষ তারিখ *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        min={date}
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono-num"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between">
+                    <span className="text-slate-600">মোট অনুপস্থিতির দিন:</span>
+                    <span className="font-mono-num font-bold text-slate-900 text-sm">
+                      {computedAbsenceDays} দিন
+                    </span>
+                  </div>
+
+                  {hasFridayInRange && (
+                    <p className="text-[11px] text-amber-700">
+                      নির্বাচিত তারিখের মধ্যে শুক্রবার রয়েছে। শুক্রবারে অনুপস্থিত থাকলে উক্ত কর্মচারীর শুক্রবারের ওভারটাইম কমে যাবে।
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">কারণ *</label>

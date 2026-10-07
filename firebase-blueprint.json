@@ -68,6 +68,7 @@
         "name": { "type": "string", "maxLength": 120 },
         "profilePhotoUrl": { "type": "string", "maxLength": 2000 },
         "mobile": { "type": "string", "maxLength": 40 },
+        "emergencyContact": { "type": "string", "maxLength": 100 },
         "email": { "type": "string", "maxLength": 150 },
         "nid": { "type": "string", "maxLength": 60 },
         "dateOfBirth": { "type": "string", "maxLength": 20 },

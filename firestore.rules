@@ -127,7 +127,7 @@ service cloud.firestore {
           'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
         ]) &&
         data.keys().hasOnly([
-          'employeeId', 'name', 'profilePhotoUrl', 'mobile', 'email', 'nid',
+          'employeeId', 'name', 'profilePhotoUrl', 'mobile', 'emergencyContact', 'email', 'nid',
           'dateOfBirth', 'joiningDate', 'departmentId', 'designationId',
           'employmentType', 'employmentStatus', 'basicSalary', 'salaryType',
           'monthlyBonus', 'currentAddress', 'permanentAddress',
@@ -137,6 +137,7 @@ service cloud.firestore {
         data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
         data.profilePhotoUrl is string && data.profilePhotoUrl.size() <= 800000 &&
         data.mobile is string && data.mobile.size() >= 1 && data.mobile.size() <= 60 &&
+        (!('emergencyContact' in data) || (data.emergencyContact is string && data.emergencyContact.size() <= 200)) &&
         data.email is string && data.email.size() <= 200 &&
         data.nid is string && data.nid.size() <= 100 &&
         data.dateOfBirth is string && data.dateOfBirth.size() <= 40 &&

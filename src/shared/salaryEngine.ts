@@ -321,3 +321,24 @@ export function calculateLeaveDaysCount(startDate: string, endDate: string): num
   const diffTime = e.getTime() - s.getTime();
   return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
 }
+
+/**
+ * Returns all YYYY-MM-DD dates inclusively between startDate and endDate
+ */
+export function getDatesBetween(startDate: string, endDate?: string): string[] {
+  const effectiveEnd = endDate || startDate;
+  if (!startDate || !effectiveEnd) return [];
+  const sParts = startDate.split('-').map(Number);
+  const eParts = effectiveEnd.split('-').map(Number);
+  if (sParts.length !== 3 || eParts.length !== 3) return [];
+  const cur = new Date(sParts[0], sParts[1] - 1, sParts[2]);
+  const end = new Date(eParts[0], eParts[1] - 1, eParts[2]);
+  if (isNaN(cur.getTime()) || isNaN(end.getTime()) || end < cur) return [];
+  const result: string[] = [];
+  while (cur <= end && result.length < 366) {
+    result.push(formatDateYMD(cur.getFullYear(), cur.getMonth() + 1, cur.getDate()));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return result;
+}
+

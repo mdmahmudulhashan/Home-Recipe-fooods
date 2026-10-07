@@ -29,6 +29,7 @@ import {
   calculateEmployeeMonthlySalary,
   calculateLeaveDaysCount,
   getDailyAttendanceStatus,
+  getDatesBetween,
 } from '../shared/salaryEngine.ts';
 
 export interface CloudUser {
@@ -567,6 +568,7 @@ async function fetchFirestoreEmployees(
         fullName: data.name || '',
         photoUrl: data.profilePhotoUrl || '',
         mobile: data.mobile || '',
+        emergencyContact: data.emergencyContact || '',
         email: data.email || '',
         nid: data.nid || '',
         dateOfBirth: data.dateOfBirth || '',
@@ -1140,6 +1142,7 @@ export async function handleStandaloneApiRequest(
         name: String(body.fullName || '').trim(),
         profilePhotoUrl: String(body.photoUrl || '').slice(0, 750000),
         mobile: String(body.mobile || '').trim(),
+        emergencyContact: String(body.emergencyContact || '').trim().slice(0, 200),
         email: String(body.email || '').trim(),
         nid: String(body.nid || '').trim(),
         dateOfBirth: String(body.dateOfBirth || ''),
@@ -1177,6 +1180,7 @@ export async function handleStandaloneApiRequest(
         fullName: firestorePayload.name,
         photoUrl: firestorePayload.profilePhotoUrl,
         mobile: firestorePayload.mobile,
+        emergencyContact: firestorePayload.emergencyContact,
         email: firestorePayload.email,
         nid: firestorePayload.nid,
         dateOfBirth: firestorePayload.dateOfBirth,
@@ -1271,6 +1275,11 @@ export async function handleStandaloneApiRequest(
         name: String(body.fullName ?? target.fullName).trim(),
         profilePhotoUrl: String(body.photoUrl ?? target.photoUrl ?? '').slice(0, 750000),
         mobile: String(body.mobile ?? target.mobile).trim(),
+        emergencyContact: String(
+          body.emergencyContact ?? target.emergencyContact ?? existingData.emergencyContact ?? ''
+        )
+          .trim()
+          .slice(0, 200),
         email: String(body.email ?? target.email ?? '').trim(),
         nid: String(body.nid ?? target.nid ?? '').trim(),
         dateOfBirth: String(body.dateOfBirth ?? target.dateOfBirth ?? ''),
@@ -1307,6 +1316,7 @@ export async function handleStandaloneApiRequest(
         fullName: firestorePayload.name,
         photoUrl: firestorePayload.profilePhotoUrl,
         mobile: firestorePayload.mobile,
+        emergencyContact: firestorePayload.emergencyContact,
         email: firestorePayload.email,
         nid: firestorePayload.nid,
         dateOfBirth: firestorePayload.dateOfBirth,
@@ -1443,7 +1453,8 @@ export async function handleStandaloneApiRequest(
     }
     if (method === 'POST') {
       const empId = Number(body.employeeId);
-      const dateStr = String(body.date);
+      const startDateStr = String(body.startDate || body.date || '').trim();
+      const endDateStr = String(body.endDate || startDateStr).trim();
       const emp = empMap[empId];
       if (!emp) {
         throw new Error('কর্মচারীর তথ্য পাওয়া যায়নি।');
@@ -1451,37 +1462,64 @@ export async function handleStandaloneApiRequest(
       if (isManager && !currentUser.assignedDepartmentIds.includes(emp.departmentId)) {
         throw new Error('আপনি শুধুমাত্র আপনার নির্ধারিত বিভাগের কর্মচারীদের অনুপস্থিতি যোগ করতে পারবেন।');
       }
-      if (absencesList.some((a) => a.employeeId === empId && a.date === dateStr)) {
+      if (!startDateStr || !endDateStr || endDateStr < startDateStr) {
+        throw new Error('শেষ তারিখ শুরুর তারিখের সমান বা পরের হতে হবে।');
+      }
+
+      const targetDates = getDatesBetween(startDateStr, endDateStr);
+      if (targetDates.length === 0) {
+        throw new Error('সঠিক তারিখ নির্বাচন করুন।');
+      }
+
+      const newDates = targetDates.filter(
+        (dStr) => !absencesList.some((a) => a.employeeId === empId && a.date === dStr)
+      );
+
+      if (newDates.length === 0) {
         throw new Error('এই কর্মচারীর উক্ত তারিখের অনুপস্থিতি ইতিমধ্যে এন্ট্রি করা হয়েছে।');
       }
 
-      const nextId = absencesList.reduce((m, a) => Math.max(m, a.id), 0) + 1;
-      const docId = `absence_${nextId}`;
-      const docRef = doc(firestoreDb, 'absences', docId);
+      let nextId = absencesList.reduce((m, a) => Math.max(m, a.id), 0) + 1;
+      const createdRecords: any[] = [];
+      const cleanReason = String(body.reason || 'অনুপস্থিত').trim();
 
-      const firestorePayload = {
-        employeeId: empId,
-        departmentId: Number(emp.departmentId),
-        date: dateStr,
-        reason: String(body.reason || 'অনুপস্থিত').trim(),
-        addedBy: currentUser.name,
-        createdBy: currentUser.uid,
-        updatedBy: currentUser.uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
+      for (const dStr of newDates) {
+        const docId = `absence_${nextId}`;
+        const docRef = doc(firestoreDb, 'absences', docId);
 
-      await setDoc(docRef, firestorePayload);
+        const firestorePayload = {
+          employeeId: empId,
+          departmentId: Number(emp.departmentId),
+          date: dStr,
+          reason: cleanReason,
+          addedBy: currentUser.name,
+          createdBy: currentUser.uid,
+          updatedBy: currentUser.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+
+        await setDoc(docRef, firestorePayload);
+        createdRecords.push({
+          id: nextId,
+          ...firestorePayload,
+          addedByName: currentUser.name,
+        });
+        nextId += 1;
+      }
 
       await writeActivityLog({
         user: currentUser,
-        action: 'অনুপস্থিতির রেকর্ড যোগ করেছেন',
+        action:
+          newDates.length > 1
+            ? `${newDates.length} দিনের অনুপস্থিতির রেকর্ড যোগ করেছেন (${startDateStr} হতে ${endDateStr})`
+            : 'অনুপস্থিতির রেকর্ড যোগ করেছেন',
         module: 'অনুপস্থিতি',
-        recordId: docId,
+        recordId: `absence_${createdRecords[0].id}`,
         employeeId: emp?.employeeCode || String(empId),
       });
 
-      return { id: nextId, ...firestorePayload, addedByName: currentUser.name };
+      return createdRecords[0];
     }
   }
 

@@ -262,6 +262,14 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500 flex items-center gap-2">
+                          <Phone className="w-4 h-4 text-amber-600" /> জরুরী যোগাযোগ
+                        </span>
+                        <span className="font-mono-num font-medium text-slate-900">
+                          {emp.emergencyContact || 'প্রদান করা হয়নি'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 flex items-center gap-2">
                           <Mail className="w-4 h-4" /> Email
                         </span>
                         <span className="text-slate-900">{emp.email || 'প্রদান করা হয়নি'}</span>
