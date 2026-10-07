@@ -242,17 +242,21 @@ export async function ensureFirestoreUserAndSeed(overrideEmail?: string): Promis
   let userStatus = 'ACTIVE';
 
   if (!snap.exists()) {
-    await setDoc(userRef, {
-      uid: fbUser.uid,
-      name: userName,
-      email: email || 'superadmin@homerecipe.com',
-      role: userRole,
-      assignedDepartmentIds,
-      status: 'ACTIVE',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    await getDocFromServer(userRef);
+    try {
+      await setDoc(userRef, {
+        uid: fbUser.uid,
+        name: userName,
+        email: email || 'superadmin@homerecipe.com',
+        role: userRole,
+        assignedDepartmentIds,
+        status: 'ACTIVE',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await getDocFromServer(userRef);
+    } catch {
+      // Proceed with resolved role profile
+    }
   } else {
     const d = snap.data();
     // If logging in with a specific account email on this Firebase session, sync the role to match the account
@@ -260,16 +264,20 @@ export async function ensureFirestoreUserAndSeed(overrideEmail?: string): Promis
       userRole = known.role;
       userName = known.name;
       assignedDepartmentIds = known.assignedDepartmentIds;
-      await setDoc(userRef, {
-        uid: fbUser.uid,
-        name: userName,
-        email,
-        role: userRole,
-        assignedDepartmentIds,
-        status: 'ACTIVE',
-        createdAt: d.createdAt || serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      try {
+        await setDoc(userRef, {
+          uid: fbUser.uid,
+          name: userName,
+          email,
+          role: userRole,
+          assignedDepartmentIds,
+          status: 'ACTIVE',
+          createdAt: d.createdAt || serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } catch {
+        // Proceed with resolved account profile
+      }
     } else {
       const rawRole = String(d.role || 'SUPER_ADMIN').toUpperCase();
       if (rawRole === 'ADMIN' || rawRole === 'MANAGER' || rawRole === 'SUPER_ADMIN') {

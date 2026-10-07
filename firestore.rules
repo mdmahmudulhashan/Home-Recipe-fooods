@@ -25,13 +25,15 @@ service cloud.firestore {
 
     function isVerifiedUser() {
       return isSignedIn() && (
-        request.auth.token.email_verified == true ||
-        request.auth.token.firebase.sign_in_provider != 'google.com'
+        request.auth.token.firebase.sign_in_provider != 'google.com' ||
+        request.auth.token.email_verified == true
       );
     }
 
     function isBootstrappedSuperAdmin() {
-      return isSignedIn() && request.auth.token.email == 'mdmahmudulhashan0@gmail.com';
+      return isSignedIn() &&
+        'email' in request.auth.token &&
+        request.auth.token.email == 'mdmahmudulhashan0@gmail.com';
     }
 
     function userDocPath() {
@@ -371,7 +373,7 @@ service cloud.firestore {
     // =========================================================================
     match /roles/{roleId} {
       allow get: if isSignedIn() && isValidId(roleId) && isSuperAdmin();
-      allow list: if isSignedIn() && existing().name in ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'super_admin', 'admin', 'manager'] && isSuperAdmin();
+      allow list: if isSignedIn() && existing().name is string && isSuperAdmin();
       allow create: if isVerifiedUser() && isValidId(roleId) && isValidRole(incoming()) &&
         incoming().createdAt == request.time && incoming().updatedAt == request.time &&
         isSuperAdmin();
@@ -387,7 +389,7 @@ service cloud.firestore {
     // =========================================================================
     match /departments/{departmentId} {
       allow get: if isSignedIn() && isValidId(departmentId) && (isAdminOrSuper() || hasActiveUserDoc());
-      allow list: if isSignedIn() && (existing().status in ['ACTIVE', 'INACTIVE', 'active', 'inactive']) && (isAdminOrSuper() || hasActiveUserDoc());
+      allow list: if isSignedIn() && existing().name is string && (isAdminOrSuper() || hasActiveUserDoc());
       allow create: if isVerifiedUser() && isValidId(departmentId) && isValidDepartment(incoming()) &&
         incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
         incoming().createdAt == request.time && incoming().updatedAt == request.time &&
@@ -405,7 +407,7 @@ service cloud.firestore {
     // =========================================================================
     match /designations/{designationId} {
       allow get: if isSignedIn() && isValidId(designationId) && (isAdminOrSuper() || hasActiveUserDoc());
-      allow list: if isSignedIn() && (existing().status in ['ACTIVE', 'INACTIVE', 'active', 'inactive']) && (isAdminOrSuper() || hasActiveUserDoc());
+      allow list: if isSignedIn() && existing().name is string && (isAdminOrSuper() || hasActiveUserDoc());
       allow create: if isVerifiedUser() && isValidId(designationId) && isValidDesignation(incoming()) &&
         incoming().createdBy == request.auth.uid && incoming().updatedBy == request.auth.uid &&
         incoming().createdAt == request.time && incoming().updatedAt == request.time &&
