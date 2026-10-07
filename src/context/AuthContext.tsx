@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { auth } from '../lib/firebase.ts';
 import { authService } from '../services/firebaseServices.ts';
+import { handleStandaloneApiRequest } from '../services/standaloneFirestoreEngine.ts';
 
 export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER';
 
@@ -60,18 +61,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         headers['Authorization'] = `Bearer ${currentToken}`;
       }
 
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || 'সার্ভারে অনুরোধ সম্পন্ন করতে সমস্যা হয়েছে।');
+      if (
+        typeof window !== 'undefined' &&
+        window.location.hostname.includes('netlify.app')
+      ) {
+        return (await handleStandaloneApiRequest(url, options)) as T;
       }
 
-      return data as T;
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers,
+        });
+
+        const rawText = await response.text();
+        const trimmed = rawText.trim();
+
+        // If static hosting (e.g. Netlify / custom domain) returns an HTML page or empty non-JSON
+        if (
+          trimmed.startsWith('<') ||
+          trimmed.toLowerCase().startsWith('<!doctype') ||
+          !(trimmed.startsWith('{') || trimmed.startsWith('['))
+        ) {
+          return (await handleStandaloneApiRequest(url, options)) as T;
+        }
+
+        const data = JSON.parse(trimmed);
+
+        if (!response.ok) {
+          throw new Error(data.error || 'সার্ভারে অনুরোধ সম্পন্ন করতে সমস্যা হয়েছে।');
+        }
+
+        return data as T;
+      } catch (err: any) {
+        if (
+          err instanceof SyntaxError ||
+          String(err?.message || '').includes('Unexpected token') ||
+          String(err?.message || '').includes('Failed to fetch') ||
+          String(err?.message || '').includes('NetworkError')
+        ) {
+          return (await handleStandaloneApiRequest(url, options)) as T;
+        }
+        throw err;
+      }
     },
     []
   );

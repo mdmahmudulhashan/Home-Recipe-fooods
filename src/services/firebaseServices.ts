@@ -55,6 +55,7 @@ import {
   OperationType,
   handleFirestoreError,
 } from '../lib/firebase.ts';
+import { handleStandaloneApiRequest } from './standaloneFirestoreEngine.ts';
 
 export type ApiFetcher = <T = any>(url: string, options?: RequestInit) => Promise<T>;
 
@@ -149,34 +150,66 @@ export const authService = {
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch {
-      // Fallback to backend credential verification if email/password provider is managed server-side
+      // Fallback to credential verification
     }
 
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'লগইন ব্যর্থ হয়েছে।');
+    if (
+      typeof window !== 'undefined' &&
+      window.location.hostname.includes('netlify.app')
+    ) {
+      return await handleStandaloneApiRequest('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
     }
-    return data;
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const rawText = await res.text();
+      const trimmed = rawText.trim();
+      if (
+        trimmed.startsWith('<') ||
+        trimmed.toLowerCase().startsWith('<!doctype') ||
+        !trimmed.startsWith('{')
+      ) {
+        return await handleStandaloneApiRequest('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+        });
+      }
+      const data = JSON.parse(trimmed);
+      if (!res.ok) {
+        throw new Error(data.error || 'লগইন ব্যর্থ হয়েছে।');
+      }
+      return data;
+    } catch (err: any) {
+      if (
+        err instanceof SyntaxError ||
+        String(err?.message || '').includes('Unexpected token') ||
+        String(err?.message || '').includes('Failed to fetch') ||
+        String(err?.message || '').includes('NetworkError')
+      ) {
+        return await handleStandaloneApiRequest('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+        });
+      }
+      throw err;
+    }
   },
 
   async loginWithGooglePopup(apiFetch: ApiFetcher) {
     const result = await signInWithPopup(auth, googleAuthProvider);
     const idToken = await result.user.getIdToken();
-    const res = await fetch('/api/auth/me', {
+    const data = await apiFetch<{ user: any }>('/api/auth/me', {
       headers: {
-        'Content-Type': 'application/json',
         Authorization: `Bearer ${idToken}`,
       },
     });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'গুগল লগইন যাচাই করা যায়নি।');
-    }
 
     // Ensure user profile is synced and verified in Firestore /users/{uid}
     if (result.user.emailVerified) {
