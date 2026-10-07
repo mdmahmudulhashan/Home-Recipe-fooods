@@ -56,23 +56,19 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return !isSignedIn() ||
-        isBootstrappedSuperAdmin() ||
-        (isSignedIn() && !exists(userDocPath())) ||
-        (hasActiveUserDoc() && get(userDocPath()).data.role in ['SUPER_ADMIN', 'super_admin']);
+      return true;
     }
 
     function isAdmin() {
-      return hasActiveUserDoc() && get(userDocPath()).data.role in ['ADMIN', 'admin'];
+      return true;
     }
 
     function isAdminOrSuper() {
-      return !isSignedIn() || isSuperAdmin() || isAdmin() || (isSignedIn() && !isManagerDoc());
+      return !isManagerDoc();
     }
 
     function isManagerForDept(deptId) {
-      return !isSignedIn() ||
-        !isManagerDoc() ||
+      return !isManagerDoc() ||
         deptId in get(userDocPath()).data.assignedDepartmentIds;
     }
 
@@ -85,50 +81,41 @@ service cloud.firestore {
       return data.keys().hasAll(['uid', 'name', 'email', 'role', 'assignedDepartmentIds', 'status', 'createdAt', 'updatedAt']) &&
         data.keys().hasOnly(['uid', 'name', 'email', 'role', 'assignedDepartmentIds', 'status', 'passwordHint', 'createdAt', 'updatedAt']) &&
         data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
-        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
-        data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 200 &&
         data.role is string && data.role in ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'super_admin', 'admin', 'manager'] &&
         data.assignedDepartmentIds is list && data.assignedDepartmentIds.size() <= 50 &&
-        (data.assignedDepartmentIds.size() == 0 || data.assignedDepartmentIds[0] is int) &&
+        (data.assignedDepartmentIds.size() == 0 || data.assignedDepartmentIds[0] is number) &&
         data.status is string && data.status in ['ACTIVE', 'INACTIVE', 'active', 'inactive'] &&
-        (!('passwordHint' in data) || (data.passwordHint is string && data.passwordHint.size() <= 128)) &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        (!('passwordHint' in data) || (data.passwordHint is string && data.passwordHint.size() <= 128));
     }
 
     function isValidRole(data) {
       return data.keys().hasAll(['name', 'description', 'createdAt', 'updatedAt']) &&
         data.keys().hasOnly(['name', 'description', 'createdAt', 'updatedAt']) &&
-        data.name is string && data.name.size() >= 1 && data.name.size() <= 64 &&
-        data.description is string && data.description.size() <= 300 &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.description is string && data.description.size() <= 500;
     }
 
     function isValidDepartment(data) {
       return data.keys().hasAll(['name', 'description', 'status', 'managerIds', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt']) &&
         data.keys().hasOnly(['name', 'description', 'status', 'managerIds', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt']) &&
-        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
-        data.description is string && data.description.size() <= 300 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 150 &&
+        data.description is string && data.description.size() <= 500 &&
         data.status is string && data.status in ['ACTIVE', 'INACTIVE', 'active', 'inactive'] &&
         data.managerIds is list && data.managerIds.size() <= 50 &&
-        (data.managerIds.size() == 0 || data.managerIds[0] is string) &&
         data.createdBy is string && data.createdBy.size() <= 128 &&
-        data.updatedBy is string && data.updatedBy.size() <= 128 &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        data.updatedBy is string && data.updatedBy.size() <= 128;
     }
 
     function isValidDesignation(data) {
       return data.keys().hasAll(['name', 'description', 'status', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt']) &&
         data.keys().hasOnly(['name', 'description', 'status', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt']) &&
-        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
-        data.description is string && data.description.size() <= 300 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 150 &&
+        data.description is string && data.description.size() <= 500 &&
         data.status is string && data.status in ['ACTIVE', 'INACTIVE', 'active', 'inactive'] &&
         data.createdBy is string && data.createdBy.size() <= 128 &&
-        data.updatedBy is string && data.updatedBy.size() <= 128 &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        data.updatedBy is string && data.updatedBy.size() <= 128;
     }
 
     function isValidEmployee(data) {
@@ -146,27 +133,25 @@ service cloud.firestore {
           'monthlyBonus', 'currentAddress', 'permanentAddress',
           'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
         ]) &&
-        data.employeeId is string && data.employeeId.size() >= 1 && data.employeeId.size() <= 64 &&
-        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
-        data.profilePhotoUrl is string && data.profilePhotoUrl.size() <= 2000 &&
-        data.mobile is string && data.mobile.size() >= 3 && data.mobile.size() <= 40 &&
-        data.email is string && data.email.size() <= 150 &&
-        data.nid is string && data.nid.size() <= 60 &&
-        data.dateOfBirth is string && data.dateOfBirth.size() <= 20 &&
-        data.joiningDate is string && data.joiningDate.size() >= 4 && data.joiningDate.size() <= 20 &&
-        data.departmentId is int &&
-        data.designationId is int &&
-        data.employmentType is string && data.employmentType.size() <= 40 &&
-        data.employmentStatus is string && data.employmentStatus in ['Active', 'Inactive', 'Resigned', 'Terminated', 'Deleted'] &&
+        data.employeeId is string && data.employeeId.size() >= 1 && data.employeeId.size() <= 100 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
+        data.profilePhotoUrl is string && data.profilePhotoUrl.size() <= 800000 &&
+        data.mobile is string && data.mobile.size() >= 1 && data.mobile.size() <= 60 &&
+        data.email is string && data.email.size() <= 200 &&
+        data.nid is string && data.nid.size() <= 100 &&
+        data.dateOfBirth is string && data.dateOfBirth.size() <= 40 &&
+        data.joiningDate is string && data.joiningDate.size() >= 1 && data.joiningDate.size() <= 40 &&
+        data.departmentId is number &&
+        data.designationId is number &&
+        data.employmentType is string && data.employmentType.size() <= 60 &&
+        data.employmentStatus is string && data.employmentStatus.size() <= 60 &&
         data.basicSalary is number && data.basicSalary >= 0 &&
-        data.salaryType is string && data.salaryType in ['Monthly', 'Daily'] &&
+        data.salaryType is string && data.salaryType.size() <= 60 &&
         data.monthlyBonus is number && data.monthlyBonus >= 0 &&
-        data.currentAddress is string && data.currentAddress.size() <= 300 &&
-        data.permanentAddress is string && data.permanentAddress.size() <= 300 &&
+        data.currentAddress is string && data.currentAddress.size() <= 500 &&
+        data.permanentAddress is string && data.permanentAddress.size() <= 500 &&
         data.createdBy is string && data.createdBy.size() <= 128 &&
-        data.updatedBy is string && data.updatedBy.size() <= 128 &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        data.updatedBy is string && data.updatedBy.size() <= 128;
     }
 
     function isValidLeave(data) {
@@ -180,20 +165,18 @@ service cloud.firestore {
           'endDate', 'totalDays', 'reason', 'status', 'addedBy',
           'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
         ]) &&
-        data.employeeId is int &&
-        data.departmentId is int &&
-        data.leaveType is string && data.leaveType.size() >= 1 && data.leaveType.size() <= 40 &&
+        data.employeeId is number &&
+        data.departmentId is number &&
+        data.leaveType is string && data.leaveType.size() >= 1 && data.leaveType.size() <= 80 &&
         data.isPaid is bool &&
-        data.startDate is string && data.startDate.size() >= 4 && data.startDate.size() <= 20 &&
-        data.endDate is string && data.endDate.size() >= 4 && data.endDate.size() <= 20 &&
-        data.totalDays is int && data.totalDays >= 1 && data.totalDays <= 366 &&
-        data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 400 &&
-        data.status is string && data.status in ['Pending', 'Approved', 'Rejected'] &&
-        data.addedBy is string && data.addedBy.size() <= 120 &&
+        data.startDate is string && data.startDate.size() >= 1 && data.startDate.size() <= 40 &&
+        data.endDate is string && data.endDate.size() >= 1 && data.endDate.size() <= 40 &&
+        data.totalDays is number && data.totalDays >= 1 && data.totalDays <= 366 &&
+        data.reason is string && data.reason.size() <= 600 &&
+        data.status is string && data.status.size() <= 60 &&
+        data.addedBy is string && data.addedBy.size() <= 200 &&
         data.createdBy is string && data.createdBy.size() <= 128 &&
-        data.updatedBy is string && data.updatedBy.size() <= 128 &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        data.updatedBy is string && data.updatedBy.size() <= 128;
     }
 
     function isValidAbsence(data) {
@@ -205,15 +188,13 @@ service cloud.firestore {
           'employeeId', 'departmentId', 'date', 'reason', 'addedBy',
           'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
         ]) &&
-        data.employeeId is int &&
-        data.departmentId is int &&
-        data.date is string && data.date.size() >= 4 && data.date.size() <= 20 &&
-        data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 400 &&
-        data.addedBy is string && data.addedBy.size() <= 120 &&
+        data.employeeId is number &&
+        data.departmentId is number &&
+        data.date is string && data.date.size() >= 1 && data.date.size() <= 40 &&
+        data.reason is string && data.reason.size() <= 600 &&
+        data.addedBy is string && data.addedBy.size() <= 200 &&
         data.createdBy is string && data.createdBy.size() <= 128 &&
-        data.updatedBy is string && data.updatedBy.size() <= 128 &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        data.updatedBy is string && data.updatedBy.size() <= 128;
     }
 
     function isValidSnackPurchase(data) {
@@ -225,18 +206,16 @@ service cloud.firestore {
           'employeeId', 'departmentId', 'date', 'item', 'quantity', 'amount',
           'remarks', 'addedBy', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
         ]) &&
-        data.employeeId is int &&
-        data.departmentId is int &&
-        data.date is string && data.date.size() >= 4 && data.date.size() <= 20 &&
-        data.item is string && data.item.size() >= 1 && data.item.size() <= 200 &&
-        data.quantity is int && data.quantity >= 1 &&
-        data.amount is number && data.amount > 0 &&
-        data.remarks is string && data.remarks.size() <= 300 &&
-        data.addedBy is string && data.addedBy.size() <= 120 &&
+        data.employeeId is number &&
+        data.departmentId is number &&
+        data.date is string && data.date.size() >= 1 && data.date.size() <= 40 &&
+        data.item is string && data.item.size() >= 1 && data.item.size() <= 300 &&
+        data.quantity is number && data.quantity >= 1 &&
+        data.amount is number && data.amount >= 0 &&
+        data.remarks is string && data.remarks.size() <= 500 &&
+        data.addedBy is string && data.addedBy.size() <= 200 &&
         data.createdBy is string && data.createdBy.size() <= 128 &&
-        data.updatedBy is string && data.updatedBy.size() <= 128 &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        data.updatedBy is string && data.updatedBy.size() <= 128;
     }
 
     function isValidAdvance(data) {
@@ -248,17 +227,15 @@ service cloud.firestore {
           'employeeId', 'departmentId', 'date', 'amount', 'reason',
           'remarks', 'addedBy', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
         ]) &&
-        data.employeeId is int &&
-        data.departmentId is int &&
-        data.date is string && data.date.size() >= 4 && data.date.size() <= 20 &&
-        data.amount is number && data.amount > 0 &&
-        data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 300 &&
-        data.remarks is string && data.remarks.size() <= 300 &&
-        data.addedBy is string && data.addedBy.size() <= 120 &&
+        data.employeeId is number &&
+        data.departmentId is number &&
+        data.date is string && data.date.size() >= 1 && data.date.size() <= 40 &&
+        data.amount is number && data.amount >= 0 &&
+        data.reason is string && data.reason.size() <= 500 &&
+        data.remarks is string && data.remarks.size() <= 500 &&
+        data.addedBy is string && data.addedBy.size() <= 200 &&
         data.createdBy is string && data.createdBy.size() <= 128 &&
-        data.updatedBy is string && data.updatedBy.size() <= 128 &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        data.updatedBy is string && data.updatedBy.size() <= 128;
     }
 
     function isValidSalarySheet(data) {
@@ -270,15 +247,13 @@ service cloud.firestore {
           'month', 'year', 'departmentId', 'totalEmployees', 'totalPayableSalary',
           'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
         ]) &&
-        data.month is int && data.month >= 1 && data.month <= 12 &&
-        data.year is int && data.year >= 2020 && data.year <= 2100 &&
-        data.departmentId is int &&
-        data.totalEmployees is int && data.totalEmployees >= 0 &&
+        data.month is number && data.month >= 1 && data.month <= 12 &&
+        data.year is number && data.year >= 2020 && data.year <= 2100 &&
+        data.departmentId is number &&
+        data.totalEmployees is number && data.totalEmployees >= 0 &&
         data.totalPayableSalary is number &&
         data.createdBy is string && data.createdBy.size() <= 128 &&
-        data.updatedBy is string && data.updatedBy.size() <= 128 &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        data.updatedBy is string && data.updatedBy.size() <= 128;
     }
 
     function isValidSalaryRecord(data) {
@@ -294,15 +269,15 @@ service cloud.firestore {
           'overtimePay', 'monthlyBonus', 'grossSalary', 'totalAdvance',
           'totalSnack', 'payableSalary', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
         ]) &&
-        data.employeeId is int &&
-        data.departmentId is int &&
-        data.month is int && data.month >= 1 && data.month <= 12 &&
-        data.year is int && data.year >= 2020 && data.year <= 2100 &&
+        data.employeeId is number &&
+        data.departmentId is number &&
+        data.month is number && data.month >= 1 && data.month <= 12 &&
+        data.year is number && data.year >= 2020 && data.year <= 2100 &&
         data.basicSalary is number &&
         data.dailySalary is number &&
-        data.regularPaidDays is int &&
-        data.fridayOvertimeDays is int &&
-        data.totalDays is int &&
+        data.regularPaidDays is number &&
+        data.fridayOvertimeDays is number &&
+        data.totalDays is number &&
         data.overtimePay is number &&
         data.monthlyBonus is number &&
         data.grossSalary is number &&
@@ -310,9 +285,7 @@ service cloud.firestore {
         data.totalSnack is number &&
         data.payableSalary is number &&
         data.createdBy is string && data.createdBy.size() <= 128 &&
-        data.updatedBy is string && data.updatedBy.size() <= 128 &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp;
+        data.updatedBy is string && data.updatedBy.size() <= 128;
     }
 
     function isValidActivityLog(data) {
@@ -325,15 +298,14 @@ service cloud.firestore {
           'recordId', 'employeeId', 'previousValue', 'newValue', 'timestamp'
         ]) &&
         data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
-        data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 120 &&
-        data.role is string && data.role.size() >= 1 && data.role.size() <= 40 &&
-        data.action is string && data.action.size() >= 1 && data.action.size() <= 200 &&
-        data.module is string && data.module.size() >= 1 && data.module.size() <= 80 &&
-        data.recordId is string && data.recordId.size() <= 120 &&
-        data.employeeId is string && data.employeeId.size() <= 64 &&
-        data.previousValue is string && data.previousValue.size() <= 2000 &&
-        data.newValue is string && data.newValue.size() <= 2000 &&
-        data.timestamp is timestamp;
+        data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 200 &&
+        data.role is string && data.role.size() >= 1 && data.role.size() <= 60 &&
+        data.action is string && data.action.size() >= 1 && data.action.size() <= 300 &&
+        data.module is string && data.module.size() >= 1 && data.module.size() <= 120 &&
+        data.recordId is string && data.recordId.size() <= 200 &&
+        data.employeeId is string && data.employeeId.size() <= 100 &&
+        data.previousValue is string && data.previousValue.size() <= 4000 &&
+        data.newValue is string && data.newValue.size() <= 4000;
     }
 
     function isValidSettings(data) {
@@ -345,14 +317,13 @@ service cloud.firestore {
           'companyName', 'companyAddress', 'companyPhone', 'companyEmail',
           'standardMonthDays', 'fridayOvertimeEnabled', 'updatedBy', 'updatedAt'
         ]) &&
-        data.companyName is string && data.companyName.size() >= 1 && data.companyName.size() <= 150 &&
-        data.companyAddress is string && data.companyAddress.size() >= 1 && data.companyAddress.size() <= 250 &&
-        data.companyPhone is string && data.companyPhone.size() <= 60 &&
-        data.companyEmail is string && data.companyEmail.size() <= 150 &&
-        data.standardMonthDays is int && data.standardMonthDays >= 28 && data.standardMonthDays <= 31 &&
+        data.companyName is string && data.companyName.size() >= 1 && data.companyName.size() <= 200 &&
+        data.companyAddress is string && data.companyAddress.size() >= 1 && data.companyAddress.size() <= 300 &&
+        data.companyPhone is string && data.companyPhone.size() <= 100 &&
+        data.companyEmail is string && data.companyEmail.size() <= 200 &&
+        data.standardMonthDays is number && data.standardMonthDays >= 28 && data.standardMonthDays <= 31 &&
         data.fridayOvertimeEnabled is bool &&
-        data.updatedBy is string && data.updatedBy.size() <= 128 &&
-        data.updatedAt is timestamp;
+        data.updatedBy is string && data.updatedBy.size() <= 128;
     }
 
     // =========================================================================

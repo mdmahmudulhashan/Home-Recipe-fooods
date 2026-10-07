@@ -98,13 +98,52 @@ export const authService = {
   },
 };
 
+function compressImageDataUrl(dataUrl: string, maxWidth = 320, quality = 0.75): Promise<string> {
+  return new Promise((resolve) => {
+    if (!dataUrl || !dataUrl.startsWith('data:image/')) {
+      resolve(dataUrl);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        let width = img.width || 300;
+        let height = img.height || 300;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed);
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 // ============================================================================
 // 2. FILE UPLOAD SERVICE (Firebase Storage — storied-tine-xz0s9)
 // ============================================================================
 export const fileUploadService = {
   async uploadEmployeePhoto(employeeCode: string, dataUrl: string): Promise<string> {
-    if (!dataUrl || !dataUrl.startsWith('data:image/') || !auth.currentUser) {
+    if (!dataUrl || !dataUrl.startsWith('data:image/')) {
       return dataUrl;
+    }
+    const compactDataUrl = await compressImageDataUrl(dataUrl, 320, 0.75);
+    if (!auth.currentUser) {
+      return compactDataUrl;
     }
     const cleanCode = String(employeeCode).replace(/[^a-zA-Z0-9_-]/g, '_');
     const storagePath = `employee-photos/${cleanCode}/profile.jpg`;
@@ -113,13 +152,13 @@ export const fileUploadService = {
     try {
       return await withTimeout(
         (async () => {
-          await uploadString(photoRef, dataUrl, 'data_url');
+          await uploadString(photoRef, compactDataUrl, 'data_url');
           return await getDownloadURL(photoRef);
         })(),
-        6000
+        2500
       );
     } catch {
-      return dataUrl;
+      return compactDataUrl;
     }
   },
 

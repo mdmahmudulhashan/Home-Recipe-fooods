@@ -463,23 +463,37 @@ async function writeActivityLog(params: {
   }
 }
 
+function ensureUniqueNumericIds<T extends { id: number; docId?: string }>(items: T[]): T[] {
+  const usedIds = new Set<number>();
+  return items.map((item) => {
+    let id = Number(item.id) || 1;
+    while (usedIds.has(id)) {
+      id += 1;
+    }
+    usedIds.add(id);
+    return id === item.id ? item : { ...item, id };
+  });
+}
+
 async function fetchFirestoreDepartments(user: CloudUser) {
   const col = collection(firestoreDb, 'departments');
   const snap = await getDocs(col);
 
-  const items = snap.docs.map((d, i) => {
-    const data = d.data();
-    return {
-      id: extractNumericId(d.id, i + 1),
-      docId: d.id,
-      name: data.name || '',
-      description: data.description || '',
-      status: data.status || 'ACTIVE',
-      managerIds: Array.isArray(data.managerIds) ? data.managerIds : [],
-      createdBy: data.createdBy || user.uid,
-      createdAt: data.createdAt,
-    };
-  });
+  const items = ensureUniqueNumericIds(
+    snap.docs.map((d, i) => {
+      const data = d.data();
+      return {
+        id: extractNumericId(d.id, i + 1),
+        docId: d.id,
+        name: data.name || '',
+        description: data.description || '',
+        status: data.status || 'ACTIVE',
+        managerIds: Array.isArray(data.managerIds) ? data.managerIds : [],
+        createdBy: data.createdBy || user.uid,
+        createdAt: data.createdAt,
+      };
+    })
+  );
 
   if (user.role === 'MANAGER' && user.assignedDepartmentIds.length > 0) {
     return items
@@ -492,8 +506,8 @@ async function fetchFirestoreDepartments(user: CloudUser) {
 
 async function fetchFirestoreDesignations() {
   const snap = await getDocs(collection(firestoreDb, 'designations'));
-  return snap.docs
-    .map((d, i) => {
+  return ensureUniqueNumericIds(
+    snap.docs.map((d, i) => {
       const data = d.data();
       return {
         id: extractNumericId(d.id, i + 1),
@@ -505,7 +519,7 @@ async function fetchFirestoreDesignations() {
         createdAt: data.createdAt,
       };
     })
-    .sort((a, b) => a.id - b.id);
+  ).sort((a, b) => a.id - b.id);
 }
 
 async function fetchFirestoreEmployees(
@@ -519,8 +533,8 @@ async function fetchFirestoreEmployees(
       ? await getDocs(query(col, where('departmentId', 'in', user.assignedDepartmentIds)))
       : await getDocs(col);
 
-  return snap.docs
-    .map((d, i) => {
+  return ensureUniqueNumericIds(
+    snap.docs.map((d, i) => {
       const data = d.data();
       const id = extractNumericId(d.id, i + 1);
       const deptId = Number(data.departmentId || 1);
@@ -552,7 +566,7 @@ async function fetchFirestoreEmployees(
         createdAt: formatTimestamp(data.createdAt),
       };
     })
-    .sort((a, b) => a.id - b.id);
+  ).sort((a, b) => a.id - b.id);
 }
 
 async function fetchFirestoreLeaves(
@@ -567,8 +581,8 @@ async function fetchFirestoreLeaves(
       ? await getDocs(query(col, where('departmentId', 'in', user.assignedDepartmentIds)))
       : await getDocs(col);
 
-  return snap.docs
-    .map((d, i) => {
+  return ensureUniqueNumericIds(
+    snap.docs.map((d, i) => {
       const data = d.data();
       const empId = Number(data.employeeId);
       const deptId = Number(data.departmentId || empMap[empId]?.departmentId || 1);
@@ -595,7 +609,7 @@ async function fetchFirestoreLeaves(
         createdAt: formatTimestamp(data.createdAt),
       };
     })
-    .sort((a, b) => b.startDate.localeCompare(a.startDate));
+  ).sort((a, b) => b.startDate.localeCompare(a.startDate));
 }
 
 async function fetchFirestoreAbsences(
@@ -610,8 +624,8 @@ async function fetchFirestoreAbsences(
       ? await getDocs(query(col, where('departmentId', 'in', user.assignedDepartmentIds)))
       : await getDocs(col);
 
-  return snap.docs
-    .map((d, i) => {
+  return ensureUniqueNumericIds(
+    snap.docs.map((d, i) => {
       const data = d.data();
       const empId = Number(data.employeeId);
       const deptId = Number(data.departmentId || empMap[empId]?.departmentId || 1);
@@ -633,7 +647,7 @@ async function fetchFirestoreAbsences(
         createdAt: formatTimestamp(data.createdAt),
       };
     })
-    .sort((a, b) => b.date.localeCompare(a.date));
+  ).sort((a, b) => b.date.localeCompare(a.date));
 }
 
 async function fetchFirestoreSnacks(
@@ -643,8 +657,8 @@ async function fetchFirestoreSnacks(
 ) {
   if (user.role === 'MANAGER') return [];
   const snap = await getDocs(collection(firestoreDb, 'snack_purchases'));
-  return snap.docs
-    .map((d, i) => {
+  return ensureUniqueNumericIds(
+    snap.docs.map((d, i) => {
       const data = d.data();
       const empId = Number(data.employeeId);
       const deptId = Number(data.departmentId || empMap[empId]?.departmentId || 1);
@@ -668,7 +682,7 @@ async function fetchFirestoreSnacks(
         createdAt: formatTimestamp(data.createdAt),
       };
     })
-    .sort((a, b) => b.date.localeCompare(a.date));
+  ).sort((a, b) => b.date.localeCompare(a.date));
 }
 
 async function fetchFirestoreAdvances(
@@ -678,8 +692,8 @@ async function fetchFirestoreAdvances(
 ) {
   if (user.role === 'MANAGER') return [];
   const snap = await getDocs(collection(firestoreDb, 'advances'));
-  return snap.docs
-    .map((d, i) => {
+  return ensureUniqueNumericIds(
+    snap.docs.map((d, i) => {
       const data = d.data();
       const empId = Number(data.employeeId);
       const deptId = Number(data.departmentId || empMap[empId]?.departmentId || 1);
@@ -702,7 +716,7 @@ async function fetchFirestoreAdvances(
         createdAt: formatTimestamp(data.createdAt),
       };
     })
-    .sort((a, b) => b.date.localeCompare(a.date));
+  ).sort((a, b) => b.date.localeCompare(a.date));
 }
 
 async function fetchFirestoreSettings() {
@@ -896,24 +910,35 @@ export async function handleStandaloneApiRequest(
           // ignore
         }
       }
-      const managers = usersSnapDocs.filter(
-        (u) => String(u.role).toUpperCase() === 'MANAGER'
+      const managers = ensureUniqueNumericIds(
+        usersSnapDocs.filter((u) => String(u.role).toUpperCase() === 'MANAGER')
       );
 
-      return deptsList.map((d) => ({
-        ...d,
-        employeeCount: emps.filter(
-          (e) => e.departmentId === d.id && e.employmentStatus !== 'Deleted'
-        ).length,
-        assignedManagers: managers
+      return deptsList.map((d) => {
+        const seenManagerEmails = new Set<string>();
+        const assignedManagers = managers
           .filter(
             (m) =>
               (Array.isArray(m.assignedDepartmentIds) &&
                 m.assignedDepartmentIds.map(Number).includes(d.id)) ||
               (Array.isArray(d.managerIds) && d.managerIds.includes(m.uid))
           )
-          .map((m) => ({ id: m.id, name: m.name, email: m.email })),
-      }));
+          .filter((m) => {
+            const key = String(m.email || m.id).toLowerCase();
+            if (seenManagerEmails.has(key)) return false;
+            seenManagerEmails.add(key);
+            return true;
+          })
+          .map((m) => ({ id: m.id, name: m.name, email: m.email }));
+
+        return {
+          ...d,
+          employeeCount: emps.filter(
+            (e) => e.departmentId === d.id && e.employmentStatus !== 'Deleted'
+          ).length,
+          assignedManagers,
+        };
+      });
     }
 
     if (method === 'POST') {
@@ -931,7 +956,6 @@ export async function handleStandaloneApiRequest(
         updatedAt: serverTimestamp(),
       };
       await setDoc(docRef, payload);
-      await getDocFromServer(docRef);
 
       await writeActivityLog({
         user: currentUser,
@@ -967,7 +991,6 @@ export async function handleStandaloneApiRequest(
         updatedAt: serverTimestamp(),
       };
       await setDoc(docRef, payload);
-      await getDocFromServer(docRef);
 
       await writeActivityLog({
         user: currentUser,
@@ -1019,7 +1042,6 @@ export async function handleStandaloneApiRequest(
         updatedAt: serverTimestamp(),
       };
       await setDoc(docRef, payload);
-      await getDocFromServer(docRef);
 
       await writeActivityLog({
         user: currentUser,
@@ -1052,7 +1074,6 @@ export async function handleStandaloneApiRequest(
         updatedAt: serverTimestamp(),
       };
       await setDoc(docRef, payload);
-      await getDocFromServer(docRef);
 
       await writeActivityLog({
         user: currentUser,
@@ -1089,21 +1110,21 @@ export async function handleStandaloneApiRequest(
     }
 
     if (method === 'POST') {
-      const cleanCode = String(body.employeeCode).trim();
-      const docId = cleanCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const cleanCode = String(body.employeeCode || `HRF-${1001 + empsList.length}`).trim();
+      const docId = cleanCode.replace(/[^a-zA-Z0-9_-]/g, '_') || `emp_${Date.now()}`;
       const docRef = doc(firestoreDb, 'employees', docId);
 
       const firestorePayload = {
         employeeId: cleanCode,
-        name: String(body.fullName).trim(),
-        profilePhotoUrl: String(body.photoUrl || ''),
-        mobile: String(body.mobile).trim(),
+        name: String(body.fullName || '').trim(),
+        profilePhotoUrl: String(body.photoUrl || '').slice(0, 750000),
+        mobile: String(body.mobile || '').trim(),
         email: String(body.email || '').trim(),
         nid: String(body.nid || '').trim(),
         dateOfBirth: String(body.dateOfBirth || ''),
-        joiningDate: String(body.joiningDate),
-        departmentId: Number(body.departmentId),
-        designationId: Number(body.designationId),
+        joiningDate: String(body.joiningDate || todayStr),
+        departmentId: Number(body.departmentId || 1),
+        designationId: Number(body.designationId || 1),
         employmentType: String(body.employmentType || 'Full Time'),
         employmentStatus: String(body.employmentStatus || 'Active'),
         basicSalary: Number(body.basicSalary || 0),
@@ -1118,7 +1139,6 @@ export async function handleStandaloneApiRequest(
       };
 
       await setDoc(docRef, firestorePayload);
-      await getDocFromServer(docRef);
 
       await writeActivityLog({
         user: currentUser,
@@ -1228,7 +1248,7 @@ export async function handleStandaloneApiRequest(
       const firestorePayload = {
         employeeId: cleanCode,
         name: String(body.fullName ?? target.fullName).trim(),
-        profilePhotoUrl: String(body.photoUrl ?? target.photoUrl ?? ''),
+        profilePhotoUrl: String(body.photoUrl ?? target.photoUrl ?? '').slice(0, 750000),
         mobile: String(body.mobile ?? target.mobile).trim(),
         email: String(body.email ?? target.email ?? '').trim(),
         nid: String(body.nid ?? target.nid ?? '').trim(),
@@ -1250,7 +1270,6 @@ export async function handleStandaloneApiRequest(
       };
 
       await setDoc(docRef, firestorePayload);
-      await getDocFromServer(docRef);
 
       await writeActivityLog({
         user: currentUser,
@@ -1334,7 +1353,6 @@ export async function handleStandaloneApiRequest(
       };
 
       await setDoc(docRef, firestorePayload);
-      await getDocFromServer(docRef);
 
       await writeActivityLog({
         user: currentUser,
@@ -1380,7 +1398,6 @@ export async function handleStandaloneApiRequest(
       };
 
       await setDoc(docRef, firestorePayload);
-      await getDocFromServer(docRef);
 
       return { id, ...firestorePayload, addedByName: firestorePayload.addedBy };
     }
@@ -1434,7 +1451,6 @@ export async function handleStandaloneApiRequest(
       };
 
       await setDoc(docRef, firestorePayload);
-      await getDocFromServer(docRef);
 
       await writeActivityLog({
         user: currentUser,
@@ -1472,7 +1488,6 @@ export async function handleStandaloneApiRequest(
       };
 
       await setDoc(docRef, firestorePayload);
-      await getDocFromServer(docRef);
 
       return { id, ...firestorePayload, addedByName: firestorePayload.addedBy };
     }
@@ -1518,7 +1533,6 @@ export async function handleStandaloneApiRequest(
       };
 
       await setDoc(docRef, firestorePayload);
-      await getDocFromServer(docRef);
 
       await writeActivityLog({
         user: currentUser,
@@ -1565,7 +1579,6 @@ export async function handleStandaloneApiRequest(
       };
 
       await setDoc(docRef, firestorePayload);
-      await getDocFromServer(docRef);
 
       return {
         id,
@@ -1615,7 +1628,6 @@ export async function handleStandaloneApiRequest(
       };
 
       await setDoc(docRef, firestorePayload);
-      await getDocFromServer(docRef);
 
       await writeActivityLog({
         user: currentUser,
@@ -1656,7 +1668,6 @@ export async function handleStandaloneApiRequest(
       };
 
       await setDoc(docRef, firestorePayload);
-      await getDocFromServer(docRef);
 
       return { id, ...firestorePayload, addedByName: firestorePayload.addedBy };
     }
@@ -1731,11 +1742,12 @@ export async function handleStandaloneApiRequest(
     if (currentUser.role === 'SUPER_ADMIN') {
       try {
         const logsSnap = await getDocs(collection(firestoreDb, 'activity_logs'));
-        recentActivities = logsSnap.docs
-          .map((d, i) => {
+        recentActivities = ensureUniqueNumericIds(
+          logsSnap.docs.map((d, i) => {
             const data = d.data();
             return {
               id: extractNumericId(d.id, i + 1),
+              docId: d.id,
               userId: data.userId,
               userName: data.userName,
               userRole: data.role,
@@ -1745,6 +1757,7 @@ export async function handleStandaloneApiRequest(
               createdAt: formatTimestamp(data.timestamp),
             };
           })
+        )
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
           .slice(0, 8);
       } catch {
@@ -1967,7 +1980,7 @@ export async function handleStandaloneApiRequest(
         });
       }
     }
-    const usersList = Array.from(byEmail.values());
+    const usersList = ensureUniqueNumericIds(Array.from(byEmail.values()));
 
     if (method === 'GET') {
       return usersList;
@@ -1995,7 +2008,6 @@ export async function handleStandaloneApiRequest(
       };
 
       await setDoc(docRef, payload);
-      await getDocFromServer(docRef);
 
       return { id: nextId, ...payload };
     }
@@ -2004,7 +2016,14 @@ export async function handleStandaloneApiRequest(
   if (pathname.startsWith('/api/users/')) {
     const id = Number(pathname.split('/').pop());
     const uSnap = await getDocs(collection(firestoreDb, 'users'));
-    const targetDoc = uSnap.docs.find((d, i) => extractNumericId(d.id, i + 1) === id);
+    const mappedDocs = ensureUniqueNumericIds(
+      uSnap.docs.map((d, i) => ({
+        id: extractNumericId(d.id, i + 1),
+        docId: d.id,
+        docSnap: d,
+      }))
+    );
+    const targetDoc = mappedDocs.find((d) => d.id === id)?.docSnap;
     const docId = targetDoc?.id || `user_${id}`;
     const docRef = doc(firestoreDb, 'users', docId);
     const existingData = targetDoc?.data() || {};
@@ -2032,7 +2051,6 @@ export async function handleStandaloneApiRequest(
       }
 
       await setDoc(docRef, payload);
-      await getDocFromServer(docRef);
 
       return { id, ...payload };
     }
@@ -2041,11 +2059,12 @@ export async function handleStandaloneApiRequest(
   // 14. Activity Logs (Cloud Firestore /activity_logs)
   if (pathname === '/api/activity-logs' && method === 'GET') {
     const logsSnap = await getDocs(collection(firestoreDb, 'activity_logs'));
-    return logsSnap.docs
-      .map((d, i) => {
+    return ensureUniqueNumericIds(
+      logsSnap.docs.map((d, i) => {
         const data = d.data();
         return {
           id: extractNumericId(d.id, i + 1),
+          docId: d.id,
           userId: data.userId,
           userName: data.userName,
           userRole: data.role,
@@ -2057,7 +2076,7 @@ export async function handleStandaloneApiRequest(
           createdAt: formatTimestamp(data.timestamp),
         };
       })
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    ).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   // 15. Settings (Cloud Firestore /settings/company_config)
@@ -2081,7 +2100,6 @@ export async function handleStandaloneApiRequest(
         updatedAt: serverTimestamp(),
       };
       await setDoc(docRef, payload);
-      await getDocFromServer(docRef);
       return { id: 1, ...payload };
     }
   }
