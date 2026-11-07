@@ -50,6 +50,10 @@ export interface EmployeeCalculationInput {
   monthlyBonus: number | string;
   employmentStatus: string;
   joiningDate: string;
+  terminationDate?: string | null;
+  terminationType?: string | null;
+  terminationReason?: string | null;
+  finalSalarySettled?: boolean | null;
 }
 
 export interface MonthlyCalculationResult {
@@ -73,7 +77,7 @@ export interface MonthlyCalculationResult {
   totalFridaysInMonth: number;
   fridayLeaveDays: number; // Approved leaves falling on Fridays
   fridayOvertimeDays: number; // Fridays where employee is NOT absent AND NOT on approved leave
-  regularPaidDays: number; // 30 - regularAbsenceDays - regularUnpaidLeaveDays
+  regularPaidDays: number; // 30 - regularAbsenceDays - regularUnpaidLeaveDays (or prorated for termination)
   totalDays: number; // regularPaidDays + fridayOvertimeDays
   regularSalary: number; // dailySalary * regularPaidDays
   overtimePay: number; // dailySalary * fridayOvertimeDays
@@ -84,8 +88,17 @@ export interface MonthlyCalculationResult {
   payableSalary: number; // grossSalary - totalAdvance - totalSnack
   fridaysDetail: {
     date: string;
-    status: 'WORKED_OVERTIME' | 'ABSENT' | 'ON_LEAVE';
+    status: 'WORKED_OVERTIME' | 'ABSENT' | 'ON_LEAVE' | 'NOT_IN_SERVICE';
   }[];
+  // Termination & settlement metadata
+  employmentStatus: string;
+  isTerminated: boolean;
+  terminationDate: string | null;
+  terminationType?: string | null;
+  terminationReason?: string | null;
+  lastWorkingDay: string | null;
+  isFinalSalaryPending: boolean;
+  paymentStatus: 'PAID' | 'PENDING';
 }
 
 /**
@@ -146,8 +159,12 @@ export function getDailyAttendanceStatus(
   dateStr: string,
   employeeStatus: string,
   leaves: LeaveRecordInput[],
-  absences: AbsenceRecordInput[]
-): 'PRESENT' | 'ABSENT' | 'LEAVE' | 'INACTIVE' {
+  absences: AbsenceRecordInput[],
+  terminationDate?: string | null
+): 'PRESENT' | 'ABSENT' | 'LEAVE' | 'INACTIVE' | 'TERMINATED' {
+  if (terminationDate && dateStr > terminationDate) {
+    return 'TERMINATED';
+  }
   if (employeeStatus !== 'Active') {
     return 'INACTIVE';
   }
@@ -164,7 +181,11 @@ export function getDailyAttendanceStatus(
 
 /**
  * Centralized Monthly Salary & Attendance Calculation Engine
- * Follows Rules 15, 16, 20, 21, 37, 38 strictly.
+ * Integrates:
+ * - Active employee calculation (Rules 15, 16, 20, 21, 37, 38)
+ * - Termination & Last Working Day rule:
+ *   When employee is terminated on terminationDate, salary is computed strictly up to that Last Working Day.
+ *   The Last Working Day is included as payable if worked/paid. Days after termination are excluded.
  */
 export function calculateEmployeeMonthlySalary(
   employee: EmployeeCalculationInput,
@@ -185,7 +206,70 @@ export function calculateEmployeeMonthlySalary(
       : Number((basicSalary / standardMonthDays).toFixed(2));
 
   const datesInMonth = getDatesInMonth(year, month);
+  const firstDayOfMonth = datesInMonth[0];
+  const lastDayOfMonth = datesInMonth[datesInMonth.length - 1];
   const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+
+  const isTerminated =
+    String(employee.employmentStatus || '').toUpperCase() === 'TERMINATED' ||
+    Boolean(employee.terminationDate);
+  const terminationDate = employee.terminationDate ? String(employee.terminationDate).trim() : null;
+
+  // Case 1: Employee was terminated before this month began
+  if (isTerminated && terminationDate && terminationDate < firstDayOfMonth) {
+    return {
+      employeeId: employee.id,
+      employeeCode: employee.employeeCode,
+      fullName: employee.fullName,
+      departmentId: employee.departmentId,
+      departmentName: employee.departmentName || '',
+      designationName: employee.designationName || '',
+      month,
+      year,
+      basicSalary: Math.round(basicSalary),
+      dailySalary: Math.round(dailySalary * 100) / 100,
+      standardRegularDays: 0,
+      regularAbsenceDays: 0,
+      fridayAbsenceDays: 0,
+      totalAbsenceDays: 0,
+      approvedPaidLeaveDays: 0,
+      approvedUnpaidLeaveDays: 0,
+      regularUnpaidLeaveDays: 0,
+      totalFridaysInMonth: 0,
+      fridayLeaveDays: 0,
+      fridayOvertimeDays: 0,
+      regularPaidDays: 0,
+      totalDays: 0,
+      regularSalary: 0,
+      overtimePay: 0,
+      monthlyBonus: 0,
+      grossSalary: 0,
+      totalAdvance: 0,
+      totalSnack: 0,
+      payableSalary: 0,
+      fridaysDetail: [],
+      employmentStatus: 'Terminated',
+      isTerminated: true,
+      terminationDate,
+      terminationType: employee.terminationType || 'চাকরি থেকে অব্যাহতি',
+      terminationReason: employee.terminationReason || '',
+      lastWorkingDay: terminationDate,
+      isFinalSalaryPending: false,
+      paymentStatus: employee.finalSalarySettled ? 'PAID' : 'PENDING',
+    };
+  }
+
+  // Check if termination happens during this current month
+  const isTerminatedThisMonth =
+    isTerminated &&
+    Boolean(terminationDate && terminationDate >= firstDayOfMonth && terminationDate <= lastDayOfMonth);
+
+  // Check if employee joined during this month
+  const isJoinedThisMonth = Boolean(
+    employee.joiningDate &&
+      employee.joiningDate > firstDayOfMonth &&
+      employee.joiningDate <= lastDayOfMonth
+  );
 
   let regularAbsenceDays = 0;
   let fridayAbsenceDays = 0;
@@ -195,19 +279,29 @@ export function calculateEmployeeMonthlySalary(
   let totalFridaysInMonth = 0;
   let fridayLeaveDays = 0;
   let fridayOvertimeDays = 0;
+  let scheduledRegularDaysInService = 0;
 
   const fridaysDetail: {
     date: string;
-    status: 'WORKED_OVERTIME' | 'ABSENT' | 'ON_LEAVE';
+    status: 'WORKED_OVERTIME' | 'ABSENT' | 'ON_LEAVE' | 'NOT_IN_SERVICE';
   }[] = [];
 
   for (const dateStr of datesInMonth) {
     const isFri = isFridayDate(dateStr);
-    const approvedLeave = findLeaveOnDate(dateStr, employeeLeaves);
-    const hasAbsence = employeeAbsences.some((a) => a.date === dateStr);
+    const isBeforeJoining = employee.joiningDate ? dateStr < employee.joiningDate : false;
+    const isAfterTermination = terminationDate ? dateStr > terminationDate : false;
+    const isInService = !isBeforeJoining && !isAfterTermination;
 
     if (isFri) {
       totalFridaysInMonth++;
+      if (!isInService) {
+        fridaysDetail.push({ date: dateStr, status: 'NOT_IN_SERVICE' });
+        continue;
+      }
+
+      const approvedLeave = findLeaveOnDate(dateStr, employeeLeaves);
+      const hasAbsence = employeeAbsences.some((a) => a.date === dateStr);
+
       if (approvedLeave) {
         fridayLeaveDays++;
         if (approvedLeave.isPaid !== false) {
@@ -227,7 +321,14 @@ export function calculateEmployeeMonthlySalary(
       }
     } else {
       // Regular working day (Saturday - Thursday)
-      // Important Rule 12 & 13: Approved leave must NOT be counted as absence
+      if (!isInService) {
+        continue;
+      }
+
+      scheduledRegularDaysInService++;
+      const approvedLeave = findLeaveOnDate(dateStr, employeeLeaves);
+      const hasAbsence = employeeAbsences.some((a) => a.date === dateStr);
+
       if (approvedLeave) {
         if (approvedLeave.isPaid !== false) {
           approvedPaidLeaveDays++;
@@ -243,38 +344,54 @@ export function calculateEmployeeMonthlySalary(
 
   const totalAbsenceDays = regularAbsenceDays + fridayAbsenceDays;
 
-  // Rule 16: Regular Paid Days = Regular working days (30) - Absence days (on regular days) - Unpaid leave days (on regular days)
-  const regularPaidDays = Math.max(
-    0,
-    standardMonthDays - regularAbsenceDays - regularUnpaidLeaveDays
-  );
+  // Compute regular paid days:
+  // If terminated in this month or joined in this month, base is actual scheduled regular days in service up to terminationDate
+  // If active full month, base is standardMonthDays (default 30)
+  let regularPaidDays: number;
+  if (isTerminatedThisMonth || isJoinedThisMonth) {
+    regularPaidDays = Math.max(
+      0,
+      scheduledRegularDaysInService - regularAbsenceDays - regularUnpaidLeaveDays
+    );
+  } else {
+    regularPaidDays = Math.max(
+      0,
+      standardMonthDays - regularAbsenceDays - regularUnpaidLeaveDays
+    );
+  }
 
-  // Rule 15 & 16: Total Days = Regular Paid Days + Friday Overtime
+  // Total Days = Regular Paid Days + Friday Overtime Days
   const totalDays = regularPaidDays + fridayOvertimeDays;
 
-  // Rule 20:
-  // Regular Salary = Daily Salary * Regular Paid Days
-  // Overtime Pay = Daily Salary * Friday Overtime Days
-  // Gross Salary = Regular Salary + Overtime Pay + Monthly Bonus
   const exactDaily =
     employee.salaryType === 'Daily' ? basicSalary : basicSalary / standardMonthDays;
 
   const regularSalary = Math.round(exactDaily * regularPaidDays);
   const overtimePay = Math.round(exactDaily * fridayOvertimeDays);
-  const grossSalary = regularSalary + overtimePay + Math.round(monthlyBonus);
 
-  // Sum Advances for the selected month
+  // Bonus: For active employees, standard monthlyBonus; for terminated employees, user formula: (Regular Payable Days + Friday Duty Days) * Daily - Deductions
+  const effectiveBonus = isTerminatedThisMonth ? 0 : Math.round(monthlyBonus);
+  const grossSalary = regularSalary + overtimePay + effectiveBonus;
+
+  // Sum Advances for the selected month (only on or before termination date)
   const totalAdvance = employeeAdvances
-    .filter((a) => a.date.startsWith(monthPrefix))
+    .filter((a) => a.date.startsWith(monthPrefix) && (!terminationDate || a.date <= terminationDate))
     .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
 
-  // Sum Snack Purchases for the selected month
+  // Sum Snack Purchases for the selected month (only on or before termination date)
   const totalSnack = employeeSnacks
-    .filter((s) => s.date.startsWith(monthPrefix))
+    .filter((s) => s.date.startsWith(monthPrefix) && (!terminationDate || s.date <= terminationDate))
     .reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
 
-  // Payable Salary = Gross Salary - Total Advance - Total Snack Purchase
-  const payableSalary = Math.round(grossSalary - totalAdvance - totalSnack);
+  // Final Payable Salary = Gross Salary - Total Advance - Total Snack Purchase
+  const payableSalary = Math.max(0, Math.round(grossSalary - totalAdvance - totalSnack));
+
+  const isFinalSalaryPending = isTerminated && !employee.finalSalarySettled;
+  const paymentStatus: 'PAID' | 'PENDING' = isTerminated
+    ? employee.finalSalarySettled
+      ? 'PAID'
+      : 'PENDING'
+    : 'PAID';
 
   return {
     employeeId: employee.id,
@@ -287,7 +404,7 @@ export function calculateEmployeeMonthlySalary(
     year,
     basicSalary: Math.round(basicSalary),
     dailySalary: Math.round(dailySalary * 100) / 100,
-    standardRegularDays: standardMonthDays,
+    standardRegularDays: isTerminatedThisMonth ? scheduledRegularDaysInService : standardMonthDays,
     regularAbsenceDays,
     fridayAbsenceDays,
     totalAbsenceDays,
@@ -301,12 +418,20 @@ export function calculateEmployeeMonthlySalary(
     totalDays,
     regularSalary,
     overtimePay,
-    monthlyBonus: Math.round(monthlyBonus),
+    monthlyBonus: effectiveBonus,
     grossSalary,
     totalAdvance: Math.round(totalAdvance),
     totalSnack: Math.round(totalSnack),
     payableSalary,
     fridaysDetail,
+    employmentStatus: employee.employmentStatus || (isTerminated ? 'Terminated' : 'Active'),
+    isTerminated,
+    terminationDate,
+    terminationType: employee.terminationType || (isTerminated ? 'চাকরি থেকে অব্যাহতি' : null),
+    terminationReason: employee.terminationReason || '',
+    lastWorkingDay: terminationDate,
+    isFinalSalaryPending,
+    paymentStatus,
   };
 }
 

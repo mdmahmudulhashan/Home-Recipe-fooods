@@ -19,6 +19,7 @@ import {
   getDocFromServer,
   getDocs,
   setDoc,
+  updateDoc,
   deleteDoc,
   serverTimestamp,
   query,
@@ -569,6 +570,7 @@ async function fetchFirestoreEmployees(
         photoUrl: data.profilePhotoUrl || '',
         mobile: data.mobile || '',
         emergencyContact: data.emergencyContact || '',
+        bloodGroup: data.bloodGroup || 'A+',
         email: data.email || '',
         nid: data.nid || '',
         dateOfBirth: data.dateOfBirth || '',
@@ -584,6 +586,15 @@ async function fetchFirestoreEmployees(
         monthlyBonus: Number(data.monthlyBonus || 0),
         currentAddress: data.currentAddress || '',
         permanentAddress: data.permanentAddress || '',
+        terminationDate: data.terminationDate || null,
+        terminationType: data.terminationType || null,
+        terminationReason: data.terminationReason || '',
+        terminationNotes: data.terminationNotes || '',
+        terminatedByName: data.terminatedByName || '',
+        terminatedAt: data.terminatedAt ? formatTimestamp(data.terminatedAt) : null,
+        finalSalarySettled: data.finalSalarySettled === true,
+        settledAt: data.settledAt ? formatTimestamp(data.settledAt) : null,
+        rehireHistory: data.rehireHistory || '[]',
         createdBy: data.createdBy || '',
         rawCreatedAt: data.createdAt,
         createdAt: formatTimestamp(data.createdAt),
@@ -771,6 +782,78 @@ async function fetchFirestoreSettings() {
   };
 }
 
+export const DEFAULT_ID_CARD_TERMS: string[] = [
+  'আইডি কার্ড সবসময় সঙ্গে রাখতে হবে। কর্মস্থলে অবস্থানকালে এই আইডি কার্ড সবসময় দৃশ্যমানভাবে গলায় ঝুলিয়ে রাখতে হবে।',
+  'ব্যক্তিগত ব্যবহার নিষিদ্ধ। এই আইডি কার্ড কেবলমাত্র নির্দিষ্ট কর্মচারীর জন্য বরাদ্দ। এটি অন্য কাউকে দেওয়া, ধার দেওয়া বা হস্তান্তর করা যাবে না।',
+  'হারিয়ে গেলে বা ক্ষতিগ্রস্ত হলে রিপোর্ট করতে হবে। আইডি কার্ড হারিয়ে গেলে বা নষ্ট হলে, ২৪ ঘণ্টার মধ্যে ম্যানেজমেন্ট বিভাগে অবহিত করতে হবে এবং নতুন কার্ডের আবেদন করতে হবে।',
+  'আইডি কার্ড কোম্পানির সম্পত্তি। এই কার্ড কোম্পানির মালিকানাধীন। চাকরি শেষ হলে বা বরখাস্ত হলে, কার্ডটি অবশ্যই কোম্পানিতে ফেরত দিতে হবে।',
+  'অপব্যবহার শাস্তিয়োগ্য অপরাধ। এই কার্ডের মাধ্যমে অনুমোদিত এলাকার বাইরে প্রবেশ, ভুয়া পরিচয় প্রদান, বা অন্য যেকোনো অসদুপায় ব্যবহার কঠোরভাবে নিষিদ্ধ এবং শাস্তিয়োগ্য অপরাধ হিসেবে গণ্য হবে।',
+];
+
+export interface CloudIdCardSettings {
+  companyName: string;
+  companyLogo: string;
+  companyEmail: string;
+  companyPhone: string;
+  facebookPage: string;
+  officeAddress: string;
+  termsAndConditions: string[];
+  authorizedPersonName: string;
+  authorizedPersonDesignation: string;
+  authorizedSignatureUrl: string;
+  signaturePosition: 'right' | 'center' | 'left';
+  signatureVisibility: boolean;
+  validityYears: number;
+}
+
+export const DEFAULT_ID_CARD_SETTINGS: CloudIdCardSettings = {
+  companyName: 'Home Recipe Foods',
+  companyLogo: '',
+  companyEmail: 'homerecipefoods.official@gmail.com',
+  companyPhone: '01743-890178',
+  facebookPage: 'HOME RECIPE FOODS',
+  officeAddress: '15/149, Shah Garibullah H/S, Khulshi, Chittagong, Bangladesh',
+  termsAndConditions: DEFAULT_ID_CARD_TERMS,
+  authorizedPersonName: 'মোঃ মাহমুদুল হাসান',
+  authorizedPersonDesignation: 'Managing Director / Chairman',
+  authorizedSignatureUrl: '',
+  signaturePosition: 'right',
+  signatureVisibility: true,
+  validityYears: 5,
+};
+
+async function fetchFirestoreIdCardSettings(): Promise<CloudIdCardSettings> {
+  try {
+    const snap = await getDoc(doc(firestoreDb, 'id_card_settings', 'main_config'));
+    if (snap.exists()) {
+      const d = snap.data();
+      return {
+        companyName: d.companyName || DEFAULT_ID_CARD_SETTINGS.companyName,
+        companyLogo: d.companyLogo || '',
+        companyEmail: d.companyEmail || DEFAULT_ID_CARD_SETTINGS.companyEmail,
+        companyPhone: d.companyPhone || DEFAULT_ID_CARD_SETTINGS.companyPhone,
+        facebookPage: d.facebookPage || DEFAULT_ID_CARD_SETTINGS.facebookPage,
+        officeAddress: d.officeAddress || DEFAULT_ID_CARD_SETTINGS.officeAddress,
+        termsAndConditions:
+          Array.isArray(d.termsAndConditions) && d.termsAndConditions.length > 0
+            ? d.termsAndConditions
+            : DEFAULT_ID_CARD_TERMS,
+        authorizedPersonName:
+          d.authorizedPersonName || DEFAULT_ID_CARD_SETTINGS.authorizedPersonName,
+        authorizedPersonDesignation:
+          d.authorizedPersonDesignation || DEFAULT_ID_CARD_SETTINGS.authorizedPersonDesignation,
+        authorizedSignatureUrl: d.authorizedSignatureUrl || '',
+        signaturePosition: d.signaturePosition || 'right',
+        signatureVisibility: d.signatureVisibility !== false,
+        validityYears: Number(d.validityYears || 5),
+      };
+    }
+  } catch {
+    // fallback
+  }
+  return DEFAULT_ID_CARD_SETTINGS;
+}
+
 /**
  * Executes any API route directly against Cloud Firestore (`storied-tine-xz0s9`).
  */
@@ -862,6 +945,71 @@ export async function handleStandaloneApiRequest(
     return {
       token,
       user: profile,
+    };
+  }
+
+  // Public Verification endpoint for ID Cards (No login required)
+  if (pathname.startsWith('/api/id-card/verify/') && method === 'GET') {
+    const code = decodeURIComponent(pathname.replace('/api/id-card/verify/', '')).trim();
+    const empsSnap = await getDocs(collection(firestoreDb, 'employees'));
+    const deptsSnap = await getDocs(collection(firestoreDb, 'departments'));
+    const desigsSnap = await getDocs(collection(firestoreDb, 'designations'));
+    const idSettings = await fetchFirestoreIdCardSettings();
+
+    const deptsMap = Object.fromEntries(
+      deptsSnap.docs.map((d) => [d.id, d.data().name || ''])
+    );
+    const desigsMap = Object.fromEntries(
+      desigsSnap.docs.map((d) => [d.id, d.data().name || ''])
+    );
+
+    let targetDoc: any = null;
+    for (const d of empsSnap.docs) {
+      const data = d.data();
+      const empCode = String(data.employeeId || d.id).trim().toLowerCase();
+      if (empCode === code.toLowerCase() || d.id.toLowerCase() === code.toLowerCase()) {
+        targetDoc = { id: d.id, ...data };
+        break;
+      }
+    }
+
+    if (!targetDoc) {
+      return {
+        found: false,
+        message: 'এই আইডি নম্বরের কোনো বৈধ কর্মচারী খুঁজে পাওয়া যায়নি।',
+      };
+    }
+
+    const deptName =
+      deptsMap[`dept_${targetDoc.departmentId}`] ||
+      deptsSnap.docs.find((d) => d.data().id === targetDoc.departmentId)?.data().name ||
+      'সাধারণ';
+    const desigName =
+      desigsMap[`desig_${targetDoc.designationId}`] ||
+      desigsSnap.docs.find((d) => d.data().id === targetDoc.designationId)?.data().name ||
+      'কর্মকর্তা';
+
+    const issueDate = targetDoc.joiningDate || todayStr;
+    const issueYear = Number(issueDate.split('-')[0]) || now.getFullYear();
+    const expiryYear = issueYear + (idSettings.validityYears || 5);
+    const expireDate = `${expiryYear}-${issueDate.split('-').slice(1).join('-') || '01-01'}`;
+
+    return {
+      found: true,
+      companyName: idSettings.companyName || 'Home Recipe Foods',
+      companyLogo: idSettings.companyLogo || '',
+      fullName: targetDoc.name,
+      employeeCode: targetDoc.employeeId || targetDoc.id,
+      photoUrl: targetDoc.profilePhotoUrl || '',
+      departmentName: deptName,
+      designationName: desigName,
+      employmentStatus: targetDoc.employmentStatus || 'Active',
+      bloodGroup: targetDoc.bloodGroup || '',
+      joiningDate: targetDoc.joiningDate,
+      issueDate,
+      expireDate,
+      isValid: targetDoc.employmentStatus === 'Active',
+      verifiedAt: new Date().toISOString(),
     };
   }
 
@@ -1143,6 +1291,7 @@ export async function handleStandaloneApiRequest(
         profilePhotoUrl: String(body.photoUrl || '').slice(0, 750000),
         mobile: String(body.mobile || '').trim(),
         emergencyContact: String(body.emergencyContact || '').trim().slice(0, 200),
+        bloodGroup: String(body.bloodGroup || 'A+').trim().slice(0, 20),
         email: String(body.email || '').trim(),
         nid: String(body.nid || '').trim(),
         dateOfBirth: String(body.dateOfBirth || ''),
@@ -1181,6 +1330,7 @@ export async function handleStandaloneApiRequest(
         photoUrl: firestorePayload.profilePhotoUrl,
         mobile: firestorePayload.mobile,
         emergencyContact: firestorePayload.emergencyContact,
+        bloodGroup: firestorePayload.bloodGroup,
         email: firestorePayload.email,
         nid: firestorePayload.nid,
         dateOfBirth: firestorePayload.dateOfBirth,
@@ -1232,13 +1382,19 @@ export async function handleStandaloneApiRequest(
       todayStr,
       emp.employmentStatus,
       empLeaves,
-      empAbsences
+      empAbsences,
+      emp.terminationDate
     );
+
+    const isTerminated = emp.employmentStatus === 'Terminated' || Boolean(emp.terminationDate);
+    const termDate = emp.terminationDate ? String(emp.terminationDate).trim() : null;
+    const calcYear = isTerminated && termDate ? Number(termDate.split('-')[0]) : now.getFullYear();
+    const calcMonth = isTerminated && termDate ? Number(termDate.split('-')[1]) : (now.getMonth() + 1);
 
     const currentMonthCalculation = calculateEmployeeMonthlySalary(
       emp,
-      now.getFullYear(),
-      now.getMonth() + 1,
+      calcYear,
+      calcMonth,
       empLeaves,
       empAbsences,
       empAdvances,
@@ -1256,6 +1412,227 @@ export async function handleStandaloneApiRequest(
       snacks: empSnacks,
       salaryHistory: empSalHistory,
       currentMonthCalculation,
+    };
+  }
+
+  // Employee Termination Endpoint
+  if (pathname.includes('/terminate') && method === 'POST') {
+    const parts = pathname.split('/');
+    const rawId = parts[parts.length - 2];
+    const numId = Number(rawId);
+    let target = empsList.find(
+      (e) => e.id === numId || String(e.id) === rawId || e.docId === rawId || e.employeeCode === rawId
+    );
+
+    // Fallback: If not found in in-memory empsList, query Firestore directly
+    if (!target) {
+      try {
+        const directSnap = await getDoc(doc(firestoreDb, 'employees', rawId));
+        if (directSnap.exists()) {
+          const d = directSnap.data();
+          target = {
+            id: numId || 1,
+            docId: directSnap.id,
+            employeeCode: d.employeeId || rawId,
+            fullName: d.name || 'Employee',
+            joiningDate: d.joiningDate || '',
+            employmentStatus: d.employmentStatus || 'Active',
+            basicSalary: Number(d.basicSalary) || 0,
+            salaryType: d.salaryType || 'Monthly',
+          } as any;
+        } else {
+          const qSnap = await getDocs(
+            query(collection(firestoreDb, 'employees'), where('employeeId', '==', rawId))
+          );
+          if (!qSnap.empty) {
+            const first = qSnap.docs[0];
+            const d = first.data();
+            target = {
+              id: numId || 1,
+              docId: first.id,
+              employeeCode: d.employeeId || rawId,
+              fullName: d.name || 'Employee',
+              joiningDate: d.joiningDate || '',
+              employmentStatus: d.employmentStatus || 'Active',
+              basicSalary: Number(d.basicSalary) || 0,
+              salaryType: d.salaryType || 'Monthly',
+            } as any;
+          }
+        }
+      } catch (err) {
+        console.warn('Direct Firestore employee lookup error:', err);
+      }
+    }
+
+    if (!target) throw new Error('কর্মচারী খুঁজে পাওয়া যায়নি।');
+    const docRef = doc(firestoreDb, 'employees', target.docId);
+
+    const terminationDate = String(body.terminationDate || '').trim();
+    const terminationType = String(body.terminationType || 'চাকরি থেকে অব্যাহতি').trim();
+    const reason = String(body.reason || '').trim();
+    const notes = String(body.notes || '').trim();
+
+    if (!terminationDate) {
+      throw new Error('অব্যাহতির তারিখ / শেষ কর্মদিবস প্রদান করা আবশ্যক।');
+    }
+    if (target.joiningDate && terminationDate < target.joiningDate) {
+      throw new Error('অব্যাহতির তারিখ কর্মচারীর যোগদানের তারিখের পূর্ববর্তী হতে পারে না।');
+    }
+    if (!reason) {
+      throw new Error('অব্যাহতির কারণ উল্লেখ করা আবশ্যক।');
+    }
+
+    const terminationPayload = {
+      employmentStatus: 'Terminated',
+      terminationDate,
+      terminationType,
+      terminationReason: reason,
+      terminationNotes: notes,
+      terminatedByName: currentUser.name || 'Admin',
+      terminatedAt: serverTimestamp(),
+      finalSalarySettled: false,
+      updatedBy: currentUser.email || 'admin@homerecipefoods.com',
+      updatedAt: serverTimestamp(),
+    };
+
+    // 1. Atomic Firestore persistence
+    await setDoc(docRef, terminationPayload, { merge: true });
+
+    // 2. Reflect in memory immediately
+    target.employmentStatus = 'Terminated';
+    (target as any).terminationDate = terminationDate;
+    (target as any).terminationType = terminationType;
+    (target as any).terminationReason = reason;
+    (target as any).terminationNotes = notes;
+    (target as any).terminatedByName = currentUser.name || 'Admin';
+    (target as any).finalSalarySettled = false;
+
+    // 3. Mirror sync with backend database (PostgreSQL) if available
+    try {
+      await fetch(`/api/employees/${target.id || numId}/terminate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          terminationDate,
+          terminationType,
+          reason,
+          notes,
+        }),
+      });
+    } catch {
+      // Backend sync fallback ignored
+    }
+
+    // 4. Audit Log
+    await writeActivityLog({
+      user: currentUser,
+      action: 'চাকরি থেকে অব্যাহতি / বরখাস্ত করেছেন',
+      module: 'কর্মচারী ব্যবস্থাপনা',
+      recordId: target.docId,
+      employeeId: target.employeeCode,
+      newValue: `${target.fullName} — ${terminationType} (শেষ কর্মদিবস: ${terminationDate}, কারণ: ${reason})`,
+    });
+
+    return {
+      success: true,
+      message: 'কর্মচারীকে সফলভাবে চাকরি থেকে অব্যাহতি দেওয়া হয়েছে এবং শেষ কর্মদিবস অনুযায়ী চূড়ান্ত হিসাব সংরক্ষিত হয়েছে।',
+      employeeId: target.id,
+      terminationDate,
+    };
+  }
+
+  // Employee Rehire Endpoint
+  if (pathname.includes('/rehire') && method === 'POST') {
+    const parts = pathname.split('/');
+    const id = Number(parts[parts.length - 2]);
+    const target = empsList.find((e) => e.id === id);
+    if (!target) throw new Error('কর্মচারী খুঁজে পাওয়া যায়নি।');
+    const docRef = doc(firestoreDb, 'employees', target.docId);
+
+    const newJoiningDate = String(body.newJoiningDate || '').trim();
+    const rehireNotes = String(body.notes || '').trim();
+    if (!newJoiningDate) {
+      throw new Error('নতুন যোগদানের তারিখ প্রদান করা আবশ্যক।');
+    }
+
+    let history: any[] = [];
+    try {
+      history = JSON.parse(target.rehireHistory || '[]');
+      if (!Array.isArray(history)) history = [];
+    } catch {
+      history = [];
+    }
+
+    history.push({
+      joiningDate: target.joiningDate,
+      terminationDate: target.terminationDate,
+      terminationType: target.terminationType,
+      terminationReason: target.terminationReason,
+      terminationNotes: target.terminationNotes,
+      terminatedByName: target.terminatedByName,
+      terminatedAt: target.terminatedAt,
+      rehireDate: newJoiningDate,
+      rehireNotes,
+      rehiredByName: currentUser.name || 'Admin',
+    });
+
+    await updateDoc(docRef, {
+      employmentStatus: 'Active',
+      joiningDate: newJoiningDate,
+      terminationDate: null,
+      terminationType: null,
+      terminationReason: null,
+      terminationNotes: null,
+      terminatedByName: null,
+      terminatedAt: null,
+      finalSalarySettled: false,
+      rehireHistory: JSON.stringify(history),
+      updatedAt: serverTimestamp(),
+    });
+
+    await writeActivityLog({
+      user: currentUser,
+      action: 'কর্মচারীকে পুনর্বহাল (Rehire) করেছেন',
+      module: 'কর্মচারী ব্যবস্থাপনা',
+      recordId: target.docId,
+      employeeId: target.employeeCode,
+      newValue: `${target.fullName} — নতুন যোগদানের তারিখ: ${newJoiningDate}`,
+    });
+
+    return {
+      message: 'কর্মচারীকে সফলভাবে পুনর্বহাল করা হয়েছে। পূর্ববর্তী চাকরির ইতিহাস অক্ষত রাখা হয়েছে।',
+      employeeId: target.id,
+      newJoiningDate,
+    };
+  }
+
+  // Employee Settle Final Salary Endpoint
+  if (pathname.includes('/settle-final-salary') && method === 'POST') {
+    const parts = pathname.split('/');
+    const id = Number(parts[parts.length - 2]);
+    const target = empsList.find((e) => e.id === id);
+    if (!target) throw new Error('কর্মচারী খুঁজে পাওয়া যায়নি।');
+    const docRef = doc(firestoreDb, 'employees', target.docId);
+
+    await updateDoc(docRef, {
+      finalSalarySettled: true,
+      settledAt: serverTimestamp(),
+      settledByName: currentUser.name || 'Admin',
+      updatedAt: serverTimestamp(),
+    });
+
+    await writeActivityLog({
+      user: currentUser,
+      action: 'চূড়ান্ত বেতন পরিশোধিত চিহ্নিত করেছেন',
+      module: 'বেতন ব্যবস্থাপনা',
+      recordId: target.docId,
+      employeeId: target.employeeCode,
+      newValue: `${target.fullName} — চূড়ান্ত বেতন পরিশোধ সম্পন্ন`,
+    });
+
+    return {
+      message: 'চূড়ান্ত বেতন সফলভাবে পরিশোধিত হিসেবে চিহ্নিত করা হয়েছে।',
+      employeeId: target.id,
     };
   }
 
@@ -1280,6 +1657,9 @@ export async function handleStandaloneApiRequest(
         )
           .trim()
           .slice(0, 200),
+        bloodGroup: String(
+          body.bloodGroup ?? target.bloodGroup ?? existingData.bloodGroup ?? 'A+'
+        ).trim().slice(0, 20),
         email: String(body.email ?? target.email ?? '').trim(),
         nid: String(body.nid ?? target.nid ?? '').trim(),
         dateOfBirth: String(body.dateOfBirth ?? target.dateOfBirth ?? ''),
@@ -1317,6 +1697,7 @@ export async function handleStandaloneApiRequest(
         photoUrl: firestorePayload.profilePhotoUrl,
         mobile: firestorePayload.mobile,
         emergencyContact: firestorePayload.emergencyContact,
+        bloodGroup: firestorePayload.bloodGroup,
         email: firestorePayload.email,
         nid: firestorePayload.nid,
         dateOfBirth: firestorePayload.dateOfBirth,
@@ -1852,12 +2233,27 @@ export async function handleStandaloneApiRequest(
     const advancesList = await fetchFirestoreAdvances(currentUser, empMap, deptMap);
     const sysSettings = await fetchFirestoreSettings();
 
-    let activeEmps = empsList.filter((e) => e.employmentStatus === 'Active');
+    const firstDayOfMonth = `${year}-${String(month).padStart(2, '0')}-01`;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const lastDayOfMonth = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+    let eligibleEmps = empsList.filter((e) => {
+      if (e.employmentStatus === 'Deleted') return false;
+      if (e.joiningDate && e.joiningDate > lastDayOfMonth) return false;
+      if (
+        (e.employmentStatus === 'Terminated' || Boolean(e.terminationDate)) &&
+        e.terminationDate &&
+        e.terminationDate < firstDayOfMonth
+      ) {
+        return false;
+      }
+      return true;
+    });
     if (departmentId) {
-      activeEmps = activeEmps.filter((e) => e.departmentId === departmentId);
+      eligibleEmps = eligibleEmps.filter((e) => e.departmentId === departmentId);
     }
 
-    const rows = activeEmps.map((emp) =>
+    const rows = eligibleEmps.map((emp) =>
       calculateEmployeeMonthlySalary(
         emp,
         year,
@@ -1911,7 +2307,7 @@ export async function handleStandaloneApiRequest(
   if (pathname === '/api/salary-sheet/save' && method === 'POST') {
     return {
       message: 'সকল কর্মচারীর বেতন রেকর্ড সফলভাবে ফায়ারবেসে সংরক্ষণ করা হয়েছে।',
-      savedCount: empsList.filter((e) => e.employmentStatus === 'Active').length,
+      savedCount: empsList.filter((e) => e.employmentStatus === 'Active' || e.employmentStatus === 'Terminated').length,
     };
   }
 
@@ -1925,8 +2321,24 @@ export async function handleStandaloneApiRequest(
     const advancesList = await fetchFirestoreAdvances(currentUser, empMap, deptMap);
     const sysSettings = await fetchFirestoreSettings();
 
-    const activeEmps = empsList.filter((e) => e.employmentStatus === 'Active');
-    const employeeCalculations = activeEmps.map((emp) =>
+    const firstDayOfMonth = `${year}-${String(month).padStart(2, '0')}-01`;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const lastDayOfMonth = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+    const eligibleEmps = empsList.filter((e) => {
+      if (e.employmentStatus === 'Deleted') return false;
+      if (e.joiningDate && e.joiningDate > lastDayOfMonth) return false;
+      if (
+        (e.employmentStatus === 'Terminated' || Boolean(e.terminationDate)) &&
+        e.terminationDate &&
+        e.terminationDate < firstDayOfMonth
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    const employeeCalculations = eligibleEmps.map((emp) =>
       calculateEmployeeMonthlySalary(
         emp,
         year,
@@ -2187,6 +2599,54 @@ export async function handleStandaloneApiRequest(
       };
       await setDoc(docRef, payload);
       return { id: 1, ...payload };
+    }
+  }
+
+  // 16. ID Card Settings (Cloud Firestore /id_card_settings/main_config)
+  if (pathname === '/api/id-card/settings') {
+    if (method === 'GET') {
+      return fetchFirestoreIdCardSettings();
+    }
+    if (method === 'PUT') {
+      const docRef = doc(firestoreDb, 'id_card_settings', 'main_config');
+      const current = await fetchFirestoreIdCardSettings();
+      const payload = {
+        companyName: String(body.companyName ?? current.companyName).trim(),
+        companyLogo: String(body.companyLogo ?? current.companyLogo ?? ''),
+        companyEmail: String(body.companyEmail ?? current.companyEmail).trim(),
+        companyPhone: String(body.companyPhone ?? current.companyPhone).trim(),
+        facebookPage: String(body.facebookPage ?? current.facebookPage).trim(),
+        officeAddress: String(body.officeAddress ?? current.officeAddress).trim(),
+        termsAndConditions: Array.isArray(body.termsAndConditions)
+          ? body.termsAndConditions
+          : current.termsAndConditions,
+        authorizedPersonName: String(
+          body.authorizedPersonName ?? current.authorizedPersonName
+        ).trim(),
+        authorizedPersonDesignation: String(
+          body.authorizedPersonDesignation ?? current.authorizedPersonDesignation
+        ).trim(),
+        authorizedSignatureUrl: String(
+          body.authorizedSignatureUrl ?? current.authorizedSignatureUrl ?? ''
+        ),
+        signaturePosition: String(body.signaturePosition ?? current.signaturePosition ?? 'right'),
+        signatureVisibility: Boolean(
+          body.signatureVisibility ?? current.signatureVisibility ?? true
+        ),
+        validityYears: Number(body.validityYears ?? current.validityYears ?? 5),
+        updatedBy: currentUser.uid,
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(docRef, payload);
+
+      await writeActivityLog({
+        user: currentUser,
+        action: 'আইডি কার্ড সেটিংস আপডেট করেছেন',
+        module: 'আইডি কার্ড',
+        recordId: 'main_config',
+      });
+
+      return payload;
     }
   }
 

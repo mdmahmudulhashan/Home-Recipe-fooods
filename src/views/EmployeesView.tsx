@@ -8,10 +8,18 @@ import {
   X,
   ArrowUpDown,
   Upload,
+  CreditCard,
+  UserX,
+  UserPlus,
+  FileText,
+  CheckCircle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.tsx';
 import { formatTaka, getEmploymentStatusLabel } from '../utils/formatters.ts';
 import { ConfirmDialog } from '../components/ConfirmDialog.tsx';
+import { TerminationModal } from '../components/TerminationModal.tsx';
+import { FinalSettlementSlipModal } from '../components/FinalSettlementSlipModal.tsx';
+import { RehireModal } from '../components/RehireModal.tsx';
 import {
   employeeService,
   departmentService,
@@ -29,6 +37,7 @@ const initialForm = {
   photoUrl: '',
   mobile: '',
   emergencyContact: '',
+  bloodGroup: 'A+',
   email: '',
   nid: '',
   dateOfBirth: '',
@@ -57,6 +66,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
   const [loading, setLoading] = useState(true);
 
   // Filters & Pagination
+  const [mainTab, setMainTab] = useState<'ACTIVE' | 'FORMER' | 'ALL'>('ACTIVE');
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('ALL');
   const [desigFilter, setDesigFilter] = useState('ALL');
@@ -71,6 +81,11 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
+
+  // Termination, Rehire & Settlement Modals
+  const [terminateTarget, setTerminateTarget] = useState<any>(null);
+  const [settlementTarget, setSettlementTarget] = useState<any>(null);
+  const [rehireTarget, setRehireTarget] = useState<any>(null);
 
   // Delete Confirm
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
@@ -98,9 +113,25 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     loadData();
   }, []);
 
+  const activeCount = employeesList.filter((e) => e.employmentStatus === 'Active').length;
+  const formerCount = employeesList.filter(
+    (e) => e.employmentStatus === 'Terminated' || Boolean(e.terminationDate)
+  ).length;
+  const pendingSettlementCount = employeesList.filter(
+    (e) =>
+      (e.employmentStatus === 'Terminated' || Boolean(e.terminationDate)) &&
+      !e.finalSalarySettled
+  ).length;
+
   const filteredEmployees = useMemo(() => {
     return employeesList
       .filter((emp) => {
+        const isTerminated =
+          emp.employmentStatus === 'Terminated' || Boolean(emp.terminationDate);
+
+        if (mainTab === 'ACTIVE' && isTerminated) return false;
+        if (mainTab === 'FORMER' && !isTerminated) return false;
+
         const q = search.trim().toLowerCase();
         if (q) {
           const match =
@@ -130,7 +161,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           ? String(valA).localeCompare(String(valB))
           : String(valB).localeCompare(String(valA));
       });
-  }, [employeesList, search, deptFilter, desigFilter, statusFilter, sortBy, sortOrder]);
+  }, [employeesList, mainTab, search, deptFilter, desigFilter, statusFilter, sortBy, sortOrder]);
 
   const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / pageSize));
   const paginatedEmployees = filteredEmployees.slice((page - 1) * pageSize, page * pageSize);
@@ -155,6 +186,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       photoUrl: emp.photoUrl || '',
       mobile: emp.mobile,
       emergencyContact: emp.emergencyContact || '',
+      bloodGroup: emp.bloodGroup || 'A+',
       email: emp.email || '',
       nid: emp.nid || '',
       dateOfBirth: emp.dateOfBirth || '',
@@ -217,7 +249,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           <div>
             <h2 className="text-lg font-bold text-slate-900">কর্মচারী ব্যবস্থাপনা</h2>
             <p className="text-xs text-slate-500">
-              যেকোনো কর্মচারীর নামের উপর ক্লিক করে বিস্তারিত প্রোফাইল ও রেকর্ড দেখুন
+              সক্রিয় ও অব্যাহতিপ্রাপ্ত কর্মচারীদের তথ্য, সার্ভিস রেকর্ড এবং চূড়ান্ত নিষ্পত্তি
             </p>
           </div>
           {!isManager && (
@@ -231,8 +263,84 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           )}
         </div>
 
+        {/* Tab Navigation: Active, Former (Terminated), All */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-b border-slate-200 pb-3">
+          <button
+            onClick={() => {
+              setMainTab('ACTIVE');
+              setPage(1);
+            }}
+            className={`px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-colors ${
+              mainTab === 'ACTIVE'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <span>সক্রিয় কর্মচারী</span>
+            <span
+              className={`px-2 py-0.5 text-[10px] rounded-full font-mono-num font-bold ${
+                mainTab === 'ACTIVE'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-slate-200 text-slate-800'
+              }`}
+            >
+              {activeCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => {
+              setMainTab('FORMER');
+              setPage(1);
+            }}
+            className={`px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-colors ${
+              mainTab === 'FORMER'
+                ? 'bg-rose-700 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <UserX className="w-3.5 h-3.5" />
+            <span>Former Employees / চাকরি থেকে বাদ দেওয়া কর্মচারী</span>
+            <span
+              className={`px-2 py-0.5 text-[10px] rounded-full font-mono-num font-bold ${
+                mainTab === 'FORMER'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-rose-100 text-rose-800'
+              }`}
+            >
+              {formerCount}
+            </span>
+            {pendingSettlementCount > 0 && (
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="বকেয়া চূড়ান্ত বেতন রয়েছে" />
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              setMainTab('ALL');
+              setPage(1);
+            }}
+            className={`px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-colors ${
+              mainTab === 'ALL'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <span>সকল কর্মচারী (All)</span>
+            <span
+              className={`px-2 py-0.5 text-[10px] rounded-full font-mono-num font-bold ${
+                mainTab === 'ALL'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-slate-200 text-slate-800'
+              }`}
+            >
+              {employeesList.length}
+            </span>
+          </button>
+        </div>
+
         {/* Filter Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
           <div className="relative lg:col-span-2">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
@@ -304,8 +412,12 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           </div>
         ) : filteredEmployees.length === 0 ? (
           <div className="p-12 text-center space-y-3">
-            <p className="text-sm font-medium text-slate-600">কোনো কর্মচারী পাওয়া যায়নি</p>
-            {!isManager && (
+            <p className="text-sm font-medium text-slate-600">
+              {mainTab === 'FORMER'
+                ? 'কোনো চাকরিচ্যুত বা অব্যাহতিপ্রাপ্ত কর্মচারী পাওয়া যায়নি।'
+                : 'কোনো কর্মচারী পাওয়া যায়নি।'}
+            </p>
+            {!isManager && mainTab !== 'FORMER' && (
               <button
                 onClick={handleOpenAdd}
                 className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors inline-flex items-center gap-1.5"
@@ -317,49 +429,176 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs">
-                  <tr>
-                    <th className="py-3 px-4">
-                      <button
-                        onClick={() => {
-                          setSortBy('code');
-                          setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                        }}
-                        className="flex items-center gap-1 font-semibold hover:text-slate-900 whitespace-nowrap"
-                      >
-                        <span>Employee ID</span>
-                        <ArrowUpDown className="w-3 h-3" />
-                      </button>
-                    </th>
-                    <th className="py-3 px-4">
-                      <button
-                        onClick={() => {
-                          setSortBy('name');
-                          setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                        }}
-                        className="flex items-center gap-1 font-semibold hover:text-slate-900 whitespace-nowrap"
-                      >
-                        <span>নাম ও ছবি</span>
-                        <ArrowUpDown className="w-3 h-3" />
-                      </button>
-                    </th>
-                    <th className="py-3 px-4 whitespace-nowrap">বিভাগ</th>
-                    <th className="py-3 px-4 whitespace-nowrap">পদবি</th>
-                    <th className="py-3 px-4 whitespace-nowrap">মোবাইল</th>
-                    <th className="py-3 px-4 whitespace-nowrap">NID / Email</th>
-                    <th className="py-3 px-4 whitespace-nowrap">যোগদানের তারিখ</th>
-                    <th className="py-3 px-4 whitespace-nowrap">স্ট্যাটাস</th>
-                    {!isManager && (
-                      <th className="py-3 px-4 text-right whitespace-nowrap">Basic Salary</th>
-                    )}
-                    <th className="py-3 px-4 text-right whitespace-nowrap">অ্যাকশন</th>
+            {mainTab === 'FORMER' ? (
+              /* =========================================================
+                 FORMER EMPLOYEES DEDICATED TABLE
+                 ========================================================= */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-rose-50/70 border-b border-rose-200 text-rose-950 text-xs">
+                <tr>
+                  <th className="py-3 px-4">Employee ID</th>
+                  <th className="py-3 px-4">নাম ও ছবি</th>
+                  <th className="py-3 px-4 whitespace-nowrap">বিভাগ ও পদবি</th>
+                  <th className="py-3 px-4 whitespace-nowrap">যোগদানের তারিখ</th>
+                  <th className="py-3 px-4 whitespace-nowrap text-rose-800">শেষ কর্মদিবস</th>
+                  <th className="py-3 px-4 whitespace-nowrap">অব্যাহতির ধরন</th>
+                  <th className="py-3 px-4">কারণ ও নোট</th>
+                  <th className="py-3 px-4 whitespace-nowrap text-center">পরিশোধের অবস্থা</th>
+                  <th className="py-3 px-4 text-right whitespace-nowrap">অ্যাকশন</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {paginatedEmployees.map((emp) => (
+                  <tr key={emp.id} className="hover:bg-rose-50/20 transition-colors">
+                    <td className="py-3 px-4 font-mono-num text-xs font-semibold text-slate-700 whitespace-nowrap">
+                      {emp.employeeCode}
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <div className="flex items-center gap-3">
+                        {emp.photoUrl ? (
+                          <img
+                            src={emp.photoUrl}
+                            alt={emp.fullName}
+                            referrerPolicy="no-referrer"
+                            className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-rose-100 border border-rose-200 flex items-center justify-center text-xs font-bold text-rose-800 shrink-0">
+                            {emp.fullName.charAt(0)}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => onSelectEmployee(emp.id)}
+                          className="font-semibold text-slate-900 hover:text-rose-700 hover:underline text-left"
+                        >
+                          {emp.fullName}
+                        </button>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-slate-700 whitespace-nowrap text-xs">
+                      <div>{emp.departmentName}</div>
+                      <div className="text-[11px] text-slate-500">{emp.designationName}</div>
+                    </td>
+                    <td className="py-3 px-4 font-mono-num text-xs text-slate-600 whitespace-nowrap">
+                      {emp.joiningDate || '-'}
+                    </td>
+                    <td className="py-3 px-4 font-mono-num text-xs font-bold text-rose-700 whitespace-nowrap">
+                      {emp.terminationDate || '-'}
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <span className="px-2 py-0.5 text-[11px] font-semibold bg-rose-100 text-rose-800 rounded-full border border-rose-200">
+                        {emp.terminationType || 'অব্যাহতিপ্রাপ্ত'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-xs text-slate-600 max-w-xs">
+                      <div className="truncate font-medium">{emp.terminationReason || '-'}</div>
+                      {emp.terminationNotes && (
+                        <div className="text-[10px] text-slate-400 truncate">
+                          নোট: {emp.terminationNotes}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-center whitespace-nowrap">
+                      {emp.finalSalarySettled ? (
+                        <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-300">
+                          পরিশোধিত (Paid)
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-[10px] font-bold bg-rose-100 text-rose-800 rounded-full border border-rose-300">
+                          বকেয়া চূড়ান্ত বেতন
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => onSelectEmployee(emp.id)}
+                          title="বিস্তারিত প্রোফাইল দেখুন"
+                          className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-slate-100 rounded-md"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setSettlementTarget(emp)}
+                          title="চূড়ান্ত বেতন পে-স্লিপ ও নিষ্পত্তি রসিদ"
+                          className="p-1.5 text-blue-700 hover:text-blue-900 hover:bg-blue-50 rounded-md flex items-center gap-1"
+                        >
+                          <FileText className="w-4 h-4" />
+                        </button>
+                        {!isManager && (
+                          <button
+                            onClick={() => setRehireTarget(emp)}
+                            title="সংস্থায় পুনর্বহাল করুন (Rehire)"
+                            className="px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-md flex items-center gap-1"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span>পুনর্বহাল</span>
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {paginatedEmployees.map((emp) => (
-                    <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* =========================================================
+             STANDARD EMPLOYEE TABLE (ACTIVE & ALL EMPLOYEES)
+             ========================================================= */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs">
+                <tr>
+                  <th className="py-3 px-4">
+                    <button
+                      onClick={() => {
+                        setSortBy('code');
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      }}
+                      className="flex items-center gap-1 font-semibold hover:text-slate-900 whitespace-nowrap"
+                    >
+                      <span>Employee ID</span>
+                      <ArrowUpDown className="w-3 h-3" />
+                    </button>
+                  </th>
+                  <th className="py-3 px-4">
+                    <button
+                      onClick={() => {
+                        setSortBy('name');
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      }}
+                      className="flex items-center gap-1 font-semibold hover:text-slate-900 whitespace-nowrap"
+                    >
+                      <span>নাম ও ছবি</span>
+                      <ArrowUpDown className="w-3 h-3" />
+                    </button>
+                  </th>
+                  <th className="py-3 px-4 whitespace-nowrap">বিভাগ</th>
+                  <th className="py-3 px-4 whitespace-nowrap">পদবি</th>
+                  <th className="py-3 px-4 whitespace-nowrap">মোবাইল</th>
+                  <th className="py-3 px-4 whitespace-nowrap">NID / Email</th>
+                  <th className="py-3 px-4 whitespace-nowrap">যোগদানের তারিখ</th>
+                  <th className="py-3 px-4 whitespace-nowrap">স্ট্যাটাস</th>
+                  {!isManager && (
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Basic Salary</th>
+                  )}
+                  <th className="py-3 px-4 text-right whitespace-nowrap">অ্যাকশন</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {paginatedEmployees.map((emp) => {
+                  const isEmpTerminated =
+                    emp.employmentStatus === 'Terminated' || Boolean(emp.terminationDate);
+
+                  return (
+                    <tr
+                      key={emp.id}
+                      className={`hover:bg-slate-50 transition-colors ${
+                        isEmpTerminated ? 'bg-amber-50/20' : ''
+                      }`}
+                    >
                       <td className="py-3 px-4 font-mono-num text-xs font-semibold text-slate-700 whitespace-nowrap">
                         {emp.employeeCode}
                       </td>
@@ -402,15 +641,21 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                         {emp.joiningDate}
                       </td>
                       <td className="py-3 px-4 text-xs whitespace-nowrap">
-                        <span
-                          className={
-                            emp.employmentStatus === 'Active'
-                              ? 'text-emerald-700 font-semibold'
-                              : 'text-slate-500'
-                          }
-                        >
-                          {getEmploymentStatusLabel(emp.employmentStatus)}
-                        </span>
+                        {isEmpTerminated ? (
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded-full border border-amber-300">
+                            অব্যাহতিপ্রাপ্ত ({emp.terminationDate || 'Terminated'})
+                          </span>
+                        ) : (
+                          <span
+                            className={
+                              emp.employmentStatus === 'Active'
+                                ? 'text-emerald-700 font-semibold'
+                                : 'text-slate-500'
+                            }
+                          >
+                            {getEmploymentStatusLabel(emp.employmentStatus)}
+                          </span>
+                        )}
                       </td>
                       {!isManager && (
                         <td className="py-3 px-4 text-right font-mono-num font-semibold text-slate-900 whitespace-nowrap">
@@ -426,8 +671,44 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                           >
                             <Eye className="w-4 h-4" />
                           </button>
+                          <button
+                            onClick={() => {
+                              window.history.pushState({}, '', '/id-card');
+                              window.dispatchEvent(new PopStateEvent('popstate'));
+                            }}
+                            title="আইডি কার্ড দেখুন"
+                            className="p-1.5 text-[#ea580c] hover:text-[#c2410c] hover:bg-orange-50 rounded-md"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                          </button>
                           {!isManager && (
                             <>
+                              {!isEmpTerminated ? (
+                                <button
+                                  onClick={() => setTerminateTarget(emp)}
+                                  title="চাকরি থেকে অব্যাহতি / বরখাস্ত করুন"
+                                  className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-md"
+                                >
+                                  <UserX className="w-4 h-4" />
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => setSettlementTarget(emp)}
+                                    title="চূড়ান্ত বেতন রসিদ"
+                                    className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md"
+                                  >
+                                    <FileText className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => setRehireTarget(emp)}
+                                    title="পুনর্বহাল করুন"
+                                    className="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-md"
+                                  >
+                                    <UserPlus className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
                               <button
                                 onClick={() => handleOpenEdit(emp)}
                                 title="সম্পাদনা করুন"
@@ -447,10 +728,12 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                         </div>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
             {/* Pagination Footer */}
             <div className="px-6 py-3.5 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
@@ -572,6 +855,27 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                     onChange={(e) => setFormData({ ...formData, nid: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono-num"
                   />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    রক্তের গ্রুপ (Blood Group)
+                  </label>
+                  <select
+                    value={formData.bloodGroup || 'A+'}
+                    onChange={(e) =>
+                      setFormData({ ...formData, bloodGroup: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-bold text-[#ea580c]"
+                  >
+                    <option value="A+">A+ (A Positive)</option>
+                    <option value="A-">A- (A Negative)</option>
+                    <option value="B+">B+ (B Positive)</option>
+                    <option value="B-">B- (B Negative)</option>
+                    <option value="O+">O+ (O Positive)</option>
+                    <option value="O-">O- (O Negative)</option>
+                    <option value="AB+">AB+ (AB Positive)</option>
+                    <option value="AB-">AB- (AB Negative)</option>
+                  </select>
                 </div>
 
                 <div>
@@ -842,6 +1146,33 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
         loading={deleting}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
+      />
+
+      {/* Employee Termination Modal */}
+      <TerminationModal
+        employee={terminateTarget}
+        open={Boolean(terminateTarget)}
+        onClose={() => setTerminateTarget(null)}
+        onSuccess={() => loadData()}
+        showToast={showToast}
+      />
+
+      {/* Final Settlement Slip & Voucher Modal */}
+      <FinalSettlementSlipModal
+        employee={settlementTarget}
+        open={Boolean(settlementTarget)}
+        onClose={() => setSettlementTarget(null)}
+        onSuccess={() => loadData()}
+        showToast={showToast}
+      />
+
+      {/* Rehire Employee Modal */}
+      <RehireModal
+        employee={rehireTarget}
+        open={Boolean(rehireTarget)}
+        onClose={() => setRehireTarget(null)}
+        onSuccess={() => loadData()}
+        showToast={showToast}
       />
     </div>
   );

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Printer, FileDown, Eye, Save, X, Calculator } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.tsx';
 import { BENGALI_MONTHS, formatTaka, getMonthLabel } from '../utils/formatters.ts';
-import { salaryService, departmentService } from '../services/firebaseServices.ts';
+import { salaryService, departmentService, employeeService } from '../services/firebaseServices.ts';
 
 interface SalarySheetViewProps {
   onSelectEmployee: (id: number) => void;
@@ -24,6 +24,9 @@ export const SalarySheetView: React.FC<SalarySheetViewProps> = ({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'TERMINATED'>('ALL');
+  const [settlingId, setSettlingId] = useState<number | null>(null);
 
   const loadDepartments = async () => {
     try {
@@ -72,41 +75,94 @@ export const SalarySheetView: React.FC<SalarySheetViewProps> = ({
     }
   };
 
+  const handleSettleFinalSalary = async (employeeId: number, employeeName: string) => {
+    if (!window.confirm(`আপনি কি নিশ্চিতভাবে ${employeeName}-এর চূড়ান্ত বেতন পরিশোধ সম্পন্ন চিহ্নিত করতে চান?`)) {
+      return;
+    }
+    setSettlingId(employeeId);
+    try {
+      await employeeService.settleFinalSalary(apiFetch, employeeId);
+      showToast(`${employeeName}-এর চূড়ান্ত বেতন সফলভাবে পরিশোধিত হিসেবে চিহ্নিত করা হয়েছে।`, 'success');
+      await loadSalarySheet();
+    } catch (err: any) {
+      showToast(err.message || 'পরিশোধ চিহ্নিত করতে সমস্যা হয়েছে।', 'error');
+    } finally {
+      setSettlingId(null);
+    }
+  };
+
   const handlePrint = () => {
+    const existing = document.getElementById('salary-print-style');
+    if (existing) existing.remove();
+    const styleEl = document.createElement('style');
+    styleEl.id = 'salary-print-style';
+    styleEl.innerHTML = `@page { size: legal landscape; margin: 10mm 12mm; }`;
+    document.head.appendChild(styleEl);
+
+    const onAfterPrint = () => {
+      styleEl.remove();
+      window.removeEventListener('afterprint', onAfterPrint);
+    };
+    window.addEventListener('afterprint', onAfterPrint);
+
     window.print();
   };
 
-  const rows = sheetData?.rows || [];
-  const totals = sheetData?.totals || {};
+  const rawRows: any[] = sheetData?.rows || [];
+  const rows = rawRows.filter((r: any) => {
+    if (statusFilter === 'ACTIVE') return !r.isTerminated;
+    if (statusFilter === 'TERMINATED') return r.isTerminated;
+    return true;
+  });
+
+  const activeCount = rawRows.filter((r) => !r.isTerminated).length;
+  const terminatedCount = rawRows.filter((r) => r.isTerminated).length;
+  const pendingFinalSalaryCount = rawRows.filter((r) => r.isTerminated && r.isFinalSalaryPending).length;
+
+  const currentTotals = {
+    basicSalary: rows.reduce((s, r) => s + (Number(r.basicSalary) || 0), 0),
+    totalOvertimeDays: rows.reduce((s, r) => s + (Number(r.fridayOvertimeDays) || 0), 0),
+    monthlyBonus: rows.reduce((s, r) => s + (Number(r.monthlyBonus) || 0), 0),
+    grossSalary: rows.reduce((s, r) => s + (Number(r.grossSalary) || 0), 0),
+    totalAdvance: rows.reduce((s, r) => s + (Number(r.totalAdvance) || 0), 0),
+    totalSnack: rows.reduce((s, r) => s + (Number(r.totalSnack) || 0), 0),
+    payableSalary: rows.reduce((s, r) => s + (Number(r.payableSalary) || 0), 0),
+  };
 
   const renderSalaryTable = (isPrintMode = false) => (
     <div className="overflow-x-auto">
       <table
         className={`w-full text-left border-collapse ${
-          isPrintMode ? 'print-table text-xs' : 'text-xs'
+          isPrintMode ? 'print-table text-[11px]' : 'text-xs'
         }`}
       >
         <thead className="bg-slate-100 border-y border-slate-300 text-slate-800 font-bold">
           <tr>
-            <th className="py-2.5 px-2 border border-slate-300 text-center">Number</th>
-            <th className="py-2.5 px-3 border border-slate-300">নাম</th>
-            <th className="py-2.5 px-2.5 border border-slate-300 text-right">Basic Salary</th>
-            <th className="py-2.5 px-2.5 border border-slate-300 text-right">Daily Salary</th>
+            <th className="py-2.5 px-2 border border-slate-300 text-center">নং</th>
+            <th className="py-2.5 px-3 border border-slate-300">নাম ও পরিচয়</th>
+            <th className="py-2.5 px-2.5 border border-slate-300 text-center">স্ট্যাটাস / শেষ দিন</th>
+            <th className="py-2.5 px-2.5 border border-slate-300 text-right">Basic</th>
+            <th className="py-2.5 px-2.5 border border-slate-300 text-right">Daily</th>
             <th className="py-2.5 px-2 border border-slate-300 text-center">মোট দিন</th>
             <th className="py-2.5 px-2 border border-slate-300 text-center">Overtime</th>
-            <th className="py-2.5 px-2.5 border border-slate-300 text-right">মাসিক বোনাস</th>
             <th className="py-2.5 px-2.5 border border-slate-300 text-right">মোট Salary</th>
-            <th className="py-2.5 px-2.5 border border-slate-300 text-right">অগ্রিম টাকা</th>
-            <th className="py-2.5 px-2.5 border border-slate-300 text-right">নাস্তা ক্রয়</th>
+            <th className="py-2.5 px-2.5 border border-slate-300 text-right">অগ্রিম</th>
+            <th className="py-2.5 px-2.5 border border-slate-300 text-right">নাস্তা</th>
             <th className="py-2.5 px-3 border border-slate-300 text-right">পাওনা বেতন</th>
+            <th className="py-2.5 px-2.5 border border-slate-300 text-center">পরিশোধের অবস্থা</th>
             <th className="py-2.5 px-4 border border-slate-300 text-center w-36">
-              গ্রহণকারীর স্বাক্ষর
+              {isPrintMode ? 'গ্রহণকারীর স্বাক্ষর' : 'স্বাক্ষর / অ্যাকশন'}
             </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r: any, idx: number) => (
-            <tr key={r.employeeId} className="hover:bg-slate-50">
+            <tr
+              key={r.employeeId}
+              className={`hover:bg-slate-50 ${
+                r.isTerminated ? 'bg-amber-50/40' : ''
+              }`}
+            >
               <td className="py-2.5 px-2 border border-slate-300 text-center font-mono-num">
                 {idx + 1}
               </td>
@@ -125,6 +181,22 @@ export const SalarySheetView: React.FC<SalarySheetViewProps> = ({
                   {r.employeeCode} · {r.designationName} ({r.departmentName})
                 </div>
               </td>
+              <td className="py-2.5 px-2.5 border border-slate-300 text-center">
+                {r.isTerminated ? (
+                  <div className="inline-flex flex-col items-center">
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded border border-amber-300 whitespace-nowrap">
+                      অব্যাহতিপ্রাপ্ত
+                    </span>
+                    <span className="text-[10px] font-mono-num text-slate-600 mt-0.5">
+                      শেষ: {r.lastWorkingDay || r.terminationDate}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-800 rounded border border-emerald-300 whitespace-nowrap">
+                    সক্রিয়
+                  </span>
+                )}
+              </td>
               <td className="py-2.5 px-2.5 border border-slate-300 text-right font-mono-num">
                 {r.basicSalary.toLocaleString('en-IN')}
               </td>
@@ -140,9 +212,6 @@ export const SalarySheetView: React.FC<SalarySheetViewProps> = ({
               <td className="py-2.5 px-2 border border-slate-300 text-center font-mono-num font-semibold text-emerald-700">
                 {r.fridayOvertimeDays}
               </td>
-              <td className="py-2.5 px-2.5 border border-slate-300 text-right font-mono-num">
-                {r.monthlyBonus.toLocaleString('en-IN')}
-              </td>
               <td className="py-2.5 px-2.5 border border-slate-300 text-right font-mono-num font-semibold">
                 {r.grossSalary.toLocaleString('en-IN')}
               </td>
@@ -155,40 +224,70 @@ export const SalarySheetView: React.FC<SalarySheetViewProps> = ({
               <td className="py-2.5 px-3 border border-slate-300 text-right font-mono-num font-bold text-slate-900 text-sm">
                 {r.payableSalary.toLocaleString('en-IN')} ৳
               </td>
-              <td className="py-4 px-4 border border-slate-300"></td>
+              <td className="py-2.5 px-2.5 border border-slate-300 text-center">
+                {r.isTerminated ? (
+                  r.isFinalSalaryPending ? (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-rose-100 text-rose-800 rounded-full border border-rose-200 whitespace-nowrap">
+                      বকেয়া চূড়ান্ত বেতন
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200 whitespace-nowrap">
+                      পরিশোধিত (Paid)
+                    </span>
+                  )
+                ) : (
+                  <span className="px-2 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-700 rounded-full whitespace-nowrap">
+                    নিয়মিত বেতন
+                  </span>
+                )}
+              </td>
+              <td className="py-2 px-3 border border-slate-300 text-center">
+                {isPrintMode ? (
+                  <div className="h-6"></div>
+                ) : r.isTerminated && r.isFinalSalaryPending ? (
+                  <button
+                    onClick={() => handleSettleFinalSalary(r.employeeId, r.fullName)}
+                    disabled={settlingId === r.employeeId}
+                    className="px-2 py-1 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors whitespace-nowrap disabled:opacity-50"
+                  >
+                    {settlingId === r.employeeId ? 'প্রক্রিয়াকরণ...' : 'পরিশোধ চিহ্নিত করুন'}
+                  </button>
+                ) : (
+                  <div className="h-5"></div>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
         {rows.length > 0 && (
           <tfoot className="bg-slate-100 font-bold text-slate-900">
             <tr>
-              <td colSpan={2} className="py-3 px-3 border border-slate-300 text-right">
-                সর্বমোট (Grand Total):
+              <td colSpan={3} className="py-3 px-3 border border-slate-300 text-right">
+                সর্বমোট (Grand Total - {rows.length} জন):
               </td>
               <td className="py-3 px-2.5 border border-slate-300 text-right font-mono-num">
-                {totals.basicSalary?.toLocaleString('en-IN')}
+                {currentTotals.basicSalary.toLocaleString('en-IN')}
               </td>
               <td className="py-3 px-2.5 border border-slate-300 text-right font-mono-num">-</td>
               <td className="py-3 px-2 border border-slate-300 text-center font-mono-num">-</td>
               <td className="py-3 px-2 border border-slate-300 text-center font-mono-num">
-                {totals.totalOvertimeDays}
+                {currentTotals.totalOvertimeDays}
               </td>
               <td className="py-3 px-2.5 border border-slate-300 text-right font-mono-num">
-                {totals.monthlyBonus?.toLocaleString('en-IN')}
-              </td>
-              <td className="py-3 px-2.5 border border-slate-300 text-right font-mono-num">
-                {totals.grossSalary?.toLocaleString('en-IN')}
+                {currentTotals.grossSalary.toLocaleString('en-IN')}
               </td>
               <td className="py-3 px-2.5 border border-slate-300 text-right font-mono-num text-red-600">
-                {totals.totalAdvance?.toLocaleString('en-IN')}
+                {currentTotals.totalAdvance.toLocaleString('en-IN')}
               </td>
               <td className="py-3 px-2.5 border border-slate-300 text-right font-mono-num text-red-600">
-                {totals.totalSnack?.toLocaleString('en-IN')}
+                {currentTotals.totalSnack.toLocaleString('en-IN')}
               </td>
               <td className="py-3 px-3 border border-slate-300 text-right font-mono-num text-emerald-800 text-sm">
-                {totals.payableSalary?.toLocaleString('en-IN')} ৳
+                {currentTotals.payableSalary.toLocaleString('en-IN')} ৳
               </td>
-              <td className="py-3 px-4 border border-slate-300"></td>
+              <td colSpan={2} className="py-3 px-3 border border-slate-300 text-center text-[11px] text-slate-600">
+                স্বাক্ষর ও অনুমোদনের জন্য প্রস্তুত
+              </td>
             </tr>
           </tfoot>
         )}
@@ -206,7 +305,7 @@ export const SalarySheetView: React.FC<SalarySheetViewProps> = ({
               মাসিক সেলারি শিট ও ওভারটাইম ক্যালকুলেশন
             </h2>
             <p className="text-xs text-slate-500">
-              সকল হিসাব (Daily Salary = Basic/30, Friday Overtime, Gross Salary ও কর্তন) স্বয়ংক্রিয়ভাবে গণনা করা হয়েছে
+              সক্রিয় কর্মচারীদের পূর্ণাঙ্গ হিসাব এবং অব্যাহতিপ্রাপ্ত কর্মচারীদের শেষ কর্মদিবস পর্যন্ত বেতন স্বয়ংক্রিয়ভাবে সমন্বিত
             </p>
           </div>
 
@@ -246,8 +345,36 @@ export const SalarySheetView: React.FC<SalarySheetViewProps> = ({
           </div>
         </div>
 
+        {/* Summary Metric Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <span className="text-[11px] text-slate-500 font-medium">সক্রিয় কর্মচারী</span>
+            <div className="text-lg font-bold font-mono-num text-slate-900 mt-0.5">
+              {activeCount} জন
+            </div>
+          </div>
+          <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg">
+            <span className="text-[11px] text-amber-800 font-medium">এই মাসে অব্যাহতিপ্রাপ্ত</span>
+            <div className="text-lg font-bold font-mono-num text-amber-900 mt-0.5">
+              {terminatedCount} জন
+            </div>
+          </div>
+          <div className="p-3 bg-rose-50/70 border border-rose-200 rounded-lg">
+            <span className="text-[11px] text-rose-800 font-medium">বকেয়া চূড়ান্ত বেতন</span>
+            <div className="text-lg font-bold font-mono-num text-rose-900 mt-0.5">
+              {pendingFinalSalaryCount} জন
+            </div>
+          </div>
+          <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg">
+            <span className="text-[11px] text-emerald-800 font-medium">মোট প্রদেয় বেতন</span>
+            <div className="text-lg font-bold font-mono-num text-emerald-900 mt-0.5">
+              {currentTotals.payableSalary.toLocaleString('en-IN')} ৳
+            </div>
+          </div>
+        </div>
+
         {/* Filter Controls */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
           <div>
             <label className="block text-[11px] font-semibold text-slate-500 mb-1">
               বেতনের মাস (Month)
@@ -299,6 +426,21 @@ export const SalarySheetView: React.FC<SalarySheetViewProps> = ({
               ))}
             </select>
           </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+              কর্মচারীর স্ট্যাটাস ফিল্টার
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white font-medium"
+            >
+              <option value="ALL">সকল কর্মচারী ({rawRows.length})</option>
+              <option value="ACTIVE">শুধুমাত্র সক্রিয় ({activeCount})</option>
+              <option value="TERMINATED">শুধুমাত্র অব্যাহতিপ্রাপ্ত ({terminatedCount})</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -306,16 +448,14 @@ export const SalarySheetView: React.FC<SalarySheetViewProps> = ({
       <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 text-xs text-emerald-950 no-print">
         <div className="flex items-center gap-2 font-semibold">
           <Calculator className="w-4 h-4 text-emerald-700" />
-          <span>কেন্দ্রীয় বেতন সূত্র:</span>
+          <span>বেতন ও অব্যাহতি নীতিমালা:</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-700 font-mono-num">
           <span>Daily = Basic / 30</span>
           <span>·</span>
-          <span>মোট দিন = নিয়মিত উপস্থিত দিন + শুক্রবার ওভারটাইম</span>
+          <span>অব্যাহতিপ্রাপ্তদের শেষ কর্মদিবস পর্যন্ত বেতন = (নিয়মিত উপস্থিত দিন + শুক্রবার ডিউটি) × Daily - অগ্রিম - নাস্তা কর্তন</span>
           <span>·</span>
-          <span>মোট Salary = (Daily × মোট দিন) + মাসিক বোনাস</span>
-          <span>·</span>
-          <span>পাওনা বেতন = মোট Salary - অগ্রিম - নাস্তা ক্রয়</span>
+          <span>শেষ কর্মদিবসের পরের দিনসমূহ স্বয়ংক্রিয়ভাবে শূন্য দিন হিসেবে গণ্য</span>
         </div>
       </div>
 

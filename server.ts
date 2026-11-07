@@ -714,11 +714,14 @@ async function startServer() {
 
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const isTerminated = emp.employmentStatus === 'Terminated' || Boolean(emp.terminationDate);
+      const termDate = emp.terminationDate ? String(emp.terminationDate).trim() : null;
       const todayStatus = getDailyAttendanceStatus(
         todayStr,
         emp.employmentStatus,
         empLeaves,
-        empAbsences
+        empAbsences,
+        termDate
       );
 
       if (isManager) {
@@ -729,6 +732,8 @@ async function startServer() {
             fullName: emp.fullName,
             photoUrl: emp.photoUrl,
             mobile: emp.mobile,
+            emergencyContact: (emp as any).emergencyContact || '',
+            bloodGroup: (emp as any).bloodGroup || 'A+',
             email: emp.email,
             nid: emp.nid,
             dateOfBirth: emp.dateOfBirth,
@@ -739,6 +744,15 @@ async function startServer() {
             designationName: desigName,
             employmentType: emp.employmentType,
             employmentStatus: emp.employmentStatus,
+            terminationDate: emp.terminationDate,
+            terminationType: emp.terminationType,
+            terminationReason: emp.terminationReason,
+            terminationNotes: emp.terminationNotes,
+            terminatedByName: emp.terminatedByName,
+            terminatedAt: emp.terminatedAt,
+            finalSalarySettled: emp.finalSalarySettled,
+            settledAt: emp.settledAt,
+            rehireHistory: emp.rehireHistory,
             currentAddress: emp.currentAddress,
             permanentAddress: emp.permanentAddress,
             todayStatus,
@@ -767,14 +781,17 @@ async function startServer() {
         .where(eq(salaryRecords.employeeId, emp.id))
         .orderBy(desc(salaryRecords.year), desc(salaryRecords.month));
 
+      const calcYear = isTerminated && termDate ? Number(termDate.split('-')[0]) : now.getFullYear();
+      const calcMonth = isTerminated && termDate ? Number(termDate.split('-')[1]) : (now.getMonth() + 1);
+
       const currentMonthSalary = calculateEmployeeMonthlySalary(
         {
           ...emp,
           departmentName: deptName,
           designationName: desigName,
         },
-        now.getFullYear(),
-        now.getMonth() + 1,
+        calcYear,
+        calcMonth,
         empLeaves,
         empAbsences,
         empAdvances,
@@ -1093,6 +1110,237 @@ async function startServer() {
       } catch (error) {
         console.error('Delete employee error:', error);
         return res.status(400).json({ error: 'কর্মচারী মুছে ফেলা সম্ভব হয়নি।' });
+      }
+    }
+  );
+
+  // Terminate Employee
+  app.post(
+    '/api/employees/:id/terminate',
+    requireAuth,
+    requireRoles(['SUPER_ADMIN', 'ADMIN']),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const empId = Number(req.params.id);
+        const { terminationDate, terminationType, reason, notes } = req.body;
+
+        const existing = await db.select().from(employees).where(eq(employees.id, empId));
+        if (existing.length === 0) {
+          return res.status(404).json({ error: 'কর্মচারী খুঁজে পাওয়া যায়নি।' });
+        }
+
+        const emp = existing[0];
+        const termDateStr = String(terminationDate || '').trim();
+        const termTypeStr = String(terminationType || 'চাকরি থেকে অব্যাহতি').trim();
+        const reasonStr = String(reason || '').trim();
+        const notesStr = String(notes || '').trim();
+
+        if (!termDateStr) {
+          return res.status(400).json({ error: 'অব্যাহতির তারিখ / শেষ কর্মদিবস প্রদান করা আবশ্যক।' });
+        }
+        if (emp.joiningDate && termDateStr < emp.joiningDate) {
+          return res.status(400).json({ error: 'অব্যাহতির তারিখ কর্মচারীর যোগদানের তারিখের পূর্ববর্তী হতে পারে না।' });
+        }
+        if (!reasonStr) {
+          return res.status(400).json({ error: 'অব্যাহতির কারণ উল্লেখ করা আবশ্যক।' });
+        }
+
+        const [updated] = await db
+          .update(employees)
+          .set({
+            employmentStatus: 'Terminated',
+            terminationDate: termDateStr,
+            terminationType: termTypeStr,
+            terminationReason: reasonStr,
+            terminationNotes: notesStr,
+            terminatedByName: req.authUser?.name || 'Admin',
+            terminatedAt: new Date(),
+            finalSalarySettled: false,
+          })
+          .where(eq(employees.id, empId))
+          .returning();
+
+        await syncDocToFirestore(
+          'employees',
+          updated.employeeCode,
+          {
+            employmentStatus: 'Terminated',
+            terminationDate: termDateStr,
+            terminationType: termTypeStr,
+            terminationReason: reasonStr,
+            terminationNotes: notesStr,
+            terminatedByName: req.authUser?.name || 'Admin',
+            terminatedAt: new Date(),
+            finalSalarySettled: false,
+          },
+          false
+        );
+
+        await logActivity({
+          user: req.authUser,
+          action: 'চাকরি থেকে অব্যাহতি / বরখাস্ত করেছেন',
+          module: 'কর্মচারী ব্যবস্থাপনা',
+          recordInfo: `${emp.fullName} (${emp.employeeCode})`,
+          departmentId: emp.departmentId,
+          newValue: `${termTypeStr} — শেষ কর্মদিবস: ${termDateStr}, কারণ: ${reasonStr}`,
+        });
+
+        return res.json({
+          message: 'কর্মচারীকে সফলভাবে চাকরি থেকে অব্যাহতি দেওয়া হয়েছে এবং শেষ কর্মদিবস অনুযায়ী চূড়ান্ত হিসাব সংরক্ষিত হয়েছে।',
+          employee: updated,
+        });
+      } catch (error) {
+        console.error('Terminate employee error:', error);
+        return res.status(400).json({ error: 'অব্যাহতি প্রক্রিয়া সম্পন্ন করা যায়নি।' });
+      }
+    }
+  );
+
+  // Rehire Employee
+  app.post(
+    '/api/employees/:id/rehire',
+    requireAuth,
+    requireRoles(['SUPER_ADMIN', 'ADMIN']),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const empId = Number(req.params.id);
+        const { newJoiningDate, notes } = req.body;
+
+        const existing = await db.select().from(employees).where(eq(employees.id, empId));
+        if (existing.length === 0) {
+          return res.status(404).json({ error: 'কর্মচারী খুঁজে পাওয়া যায়নি।' });
+        }
+
+        const emp = existing[0];
+        const newJoinStr = String(newJoiningDate || '').trim();
+        if (!newJoinStr) {
+          return res.status(400).json({ error: 'নতুন যোগদানের তারিখ প্রদান করা আবশ্যক।' });
+        }
+
+        let history: any[] = [];
+        try {
+          history = JSON.parse(emp.rehireHistory || '[]');
+          if (!Array.isArray(history)) history = [];
+        } catch {
+          history = [];
+        }
+
+        history.push({
+          joiningDate: emp.joiningDate,
+          terminationDate: emp.terminationDate,
+          terminationType: emp.terminationType,
+          terminationReason: emp.terminationReason,
+          terminationNotes: emp.terminationNotes,
+          terminatedByName: emp.terminatedByName,
+          terminatedAt: emp.terminatedAt,
+          rehireDate: newJoinStr,
+          rehireNotes: notes || '',
+          rehiredByName: req.authUser?.name || 'Admin',
+        });
+
+        const [updated] = await db
+          .update(employees)
+          .set({
+            employmentStatus: 'Active',
+            joiningDate: newJoinStr,
+            terminationDate: null,
+            terminationType: null,
+            terminationReason: null,
+            terminationNotes: null,
+            terminatedByName: null,
+            terminatedAt: null,
+            finalSalarySettled: false,
+            rehireHistory: JSON.stringify(history),
+          })
+          .where(eq(employees.id, empId))
+          .returning();
+
+        await syncDocToFirestore(
+          'employees',
+          updated.employeeCode,
+          {
+            employmentStatus: 'Active',
+            joiningDate: newJoinStr,
+            terminationDate: null,
+            terminationType: null,
+            terminationReason: null,
+            terminationNotes: null,
+            terminatedByName: null,
+            terminatedAt: null,
+            finalSalarySettled: false,
+            rehireHistory: JSON.stringify(history),
+          },
+          false
+        );
+
+        await logActivity({
+          user: req.authUser,
+          action: 'কর্মচারীকে পুনর্বহাল (Rehire) করেছেন',
+          module: 'কর্মচারী ব্যবস্থাপনা',
+          recordInfo: `${emp.fullName} (${emp.employeeCode})`,
+          departmentId: emp.departmentId,
+          newValue: `নতুন যোগদানের তারিখ: ${newJoinStr}`,
+        });
+
+        return res.json({
+          message: 'কর্মচারীকে সফলভাবে পুনর্বহাল করা হয়েছে। পূর্ববর্তী চাকরির ইতিহাস অক্ষত রাখা হয়েছে।',
+          employee: updated,
+        });
+      } catch (error) {
+        console.error('Rehire employee error:', error);
+        return res.status(400).json({ error: 'পুনর্বহাল প্রক্রিয়া সম্পন্ন করা যায়নি।' });
+      }
+    }
+  );
+
+  // Settle Final Salary
+  app.post(
+    '/api/employees/:id/settle-final-salary',
+    requireAuth,
+    requireRoles(['SUPER_ADMIN', 'ADMIN']),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const empId = Number(req.params.id);
+        const existing = await db.select().from(employees).where(eq(employees.id, empId));
+        if (existing.length === 0) {
+          return res.status(404).json({ error: 'কর্মচারী খুঁজে পাওয়া যায়নি।' });
+        }
+
+        const [updated] = await db
+          .update(employees)
+          .set({
+            finalSalarySettled: true,
+            settledAt: new Date(),
+          })
+          .where(eq(employees.id, empId))
+          .returning();
+
+        await syncDocToFirestore(
+          'employees',
+          updated.employeeCode,
+          {
+            finalSalarySettled: true,
+            settledAt: new Date(),
+          },
+          false
+        );
+
+        await logActivity({
+          user: req.authUser,
+          action: 'চূড়ান্ত বেতন পরিশোধিত চিহ্নিত করেছেন',
+          module: 'বেতন ব্যবস্থাপনা',
+          recordInfo: `${updated.fullName} (${updated.employeeCode})`,
+          departmentId: updated.departmentId,
+          newValue: 'চূড়ান্ত বেতন পরিশোধ সম্পন্ন',
+        });
+
+        return res.json({
+          message: 'চূড়ান্ত বেতন সফলভাবে পরিশোধিত হিসেবে চিহ্নিত করা হয়েছে।',
+          employee: updated,
+        });
+      } catch (error) {
+        console.error('Settle final salary error:', error);
+        return res.status(400).json({ error: 'পরিশোধ চিহ্নিতকরণ ব্যর্থ হয়েছে।' });
       }
     }
   );
@@ -1839,9 +2087,23 @@ async function startServer() {
           fridayOvertimeEnabled: true,
         };
 
+        const firstDayOfMonth = `${year}-${String(month).padStart(2, '0')}-01`;
+        const daysInMonth = new Date(Number(year), Number(month), 0).getDate();
+        const lastDayOfMonth = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
         let allEmps = await db.select().from(employees).orderBy(employees.id);
-        // Include Active employees (or employees active in that period)
-        allEmps = allEmps.filter((e) => e.employmentStatus === 'Active');
+        allEmps = allEmps.filter((e) => {
+          if (e.employmentStatus === 'Deleted') return false;
+          if (e.joiningDate && e.joiningDate > lastDayOfMonth) return false;
+          if (
+            (e.employmentStatus === 'Terminated' || Boolean(e.terminationDate)) &&
+            e.terminationDate &&
+            e.terminationDate < firstDayOfMonth
+          ) {
+            return false;
+          }
+          return true;
+        });
 
         if (departmentId) {
           allEmps = allEmps.filter((e) => e.departmentId === departmentId);
@@ -1935,10 +2197,24 @@ async function startServer() {
           fridayOvertimeEnabled: true,
         };
 
-        let allEmps = await db
-          .select()
-          .from(employees)
-          .where(eq(employees.employmentStatus, 'Active'));
+        const firstDayOfMonth = `${year}-${String(month).padStart(2, '0')}-01`;
+        const daysInMonth = new Date(Number(year), Number(month), 0).getDate();
+        const lastDayOfMonth = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+        let allEmps = await db.select().from(employees).orderBy(employees.id);
+        allEmps = allEmps.filter((e) => {
+          if (e.employmentStatus === 'Deleted') return false;
+          if (e.joiningDate && e.joiningDate > lastDayOfMonth) return false;
+          if (
+            (e.employmentStatus === 'Terminated' || Boolean(e.terminationDate)) &&
+            e.terminationDate &&
+            e.terminationDate < firstDayOfMonth
+          ) {
+            return false;
+          }
+          return true;
+        });
+
         if (departmentId) {
           allEmps = allEmps.filter((e) => e.departmentId === Number(departmentId));
         }
@@ -2042,10 +2318,23 @@ async function startServer() {
 
         const allDepts = await db.select().from(departments).orderBy(departments.id);
         const allDesigs = await db.select().from(designations);
-        const allEmps = await db
-          .select()
-          .from(employees)
-          .where(eq(employees.employmentStatus, 'Active'));
+        const firstDayOfMonth = `${year}-${String(month).padStart(2, '0')}-01`;
+        const daysInMonth = new Date(Number(year), Number(month), 0).getDate();
+        const lastDayOfMonth = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+        let allEmps = await db.select().from(employees).orderBy(employees.id);
+        allEmps = allEmps.filter((e) => {
+          if (e.employmentStatus === 'Deleted') return false;
+          if (e.joiningDate && e.joiningDate > lastDayOfMonth) return false;
+          if (
+            (e.employmentStatus === 'Terminated' || Boolean(e.terminationDate)) &&
+            e.terminationDate &&
+            e.terminationDate < firstDayOfMonth
+          ) {
+            return false;
+          }
+          return true;
+        });
         const allLeaves = await db.select().from(leaves);
         const allAbsences = await db.select().from(absences);
         const allAdvances = await db.select().from(advances);

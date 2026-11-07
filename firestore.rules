@@ -127,17 +127,20 @@ service cloud.firestore {
           'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
         ]) &&
         data.keys().hasOnly([
-          'employeeId', 'name', 'profilePhotoUrl', 'mobile', 'emergencyContact', 'email', 'nid',
+          'employeeId', 'name', 'profilePhotoUrl', 'mobile', 'emergencyContact', 'bloodGroup', 'email', 'nid',
           'dateOfBirth', 'joiningDate', 'departmentId', 'designationId',
           'employmentType', 'employmentStatus', 'basicSalary', 'salaryType',
           'monthlyBonus', 'currentAddress', 'permanentAddress',
+          'terminationDate', 'terminationType', 'terminationReason', 'terminationNotes',
+          'terminatedByName', 'terminatedAt', 'finalSalarySettled', 'settledAt', 'settledByName', 'rehireHistory',
           'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
         ]) &&
         data.employeeId is string && data.employeeId.size() >= 1 && data.employeeId.size() <= 100 &&
         data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
         data.profilePhotoUrl is string && data.profilePhotoUrl.size() <= 800000 &&
         data.mobile is string && data.mobile.size() >= 1 && data.mobile.size() <= 60 &&
-        (!('emergencyContact' in data) || (data.emergencyContact is string && data.emergencyContact.size() <= 200)) &&
+        (!('emergencyContact' in data) || data.emergencyContact == null || (data.emergencyContact is string && data.emergencyContact.size() <= 200)) &&
+        (!('bloodGroup' in data) || data.bloodGroup == null || (data.bloodGroup is string && data.bloodGroup.size() <= 20)) &&
         data.email is string && data.email.size() <= 200 &&
         data.nid is string && data.nid.size() <= 100 &&
         data.dateOfBirth is string && data.dateOfBirth.size() <= 40 &&
@@ -151,6 +154,16 @@ service cloud.firestore {
         data.monthlyBonus is number && data.monthlyBonus >= 0 &&
         data.currentAddress is string && data.currentAddress.size() <= 500 &&
         data.permanentAddress is string && data.permanentAddress.size() <= 500 &&
+        (!('terminationDate' in data) || data.terminationDate == null || (data.terminationDate is string && data.terminationDate.size() <= 40)) &&
+        (!('terminationType' in data) || data.terminationType == null || (data.terminationType is string && data.terminationType.size() <= 100)) &&
+        (!('terminationReason' in data) || data.terminationReason == null || (data.terminationReason is string && data.terminationReason.size() <= 600)) &&
+        (!('terminationNotes' in data) || data.terminationNotes == null || (data.terminationNotes is string && data.terminationNotes.size() <= 1000)) &&
+        (!('terminatedByName' in data) || data.terminatedByName == null || (data.terminatedByName is string && data.terminatedByName.size() <= 200)) &&
+        (!('terminatedAt' in data) || data.terminatedAt == null || data.terminatedAt is timestamp) &&
+        (!('finalSalarySettled' in data) || data.finalSalarySettled is bool) &&
+        (!('settledAt' in data) || data.settledAt == null || data.settledAt is timestamp) &&
+        (!('settledByName' in data) || data.settledByName == null || (data.settledByName is string && data.settledByName.size() <= 200)) &&
+        (!('rehireHistory' in data) || data.rehireHistory == null || (data.rehireHistory is string && data.rehireHistory.size() <= 10000)) &&
         data.createdBy is string && data.createdBy.size() <= 128 &&
         data.updatedBy is string && data.updatedBy.size() <= 128;
     }
@@ -327,6 +340,23 @@ service cloud.firestore {
         data.updatedBy is string && data.updatedBy.size() <= 128;
     }
 
+    function isValidIdCardSettings(data) {
+      return data.companyName is string && data.companyName.size() >= 1 && data.companyName.size() <= 200 &&
+        data.companyEmail is string && data.companyEmail.size() >= 1 && data.companyEmail.size() <= 200 &&
+        data.companyPhone is string && data.companyPhone.size() >= 1 && data.companyPhone.size() <= 100 &&
+        (!('companyLogo' in data) || (data.companyLogo is string && data.companyLogo.size() <= 800000)) &&
+        (!('facebookPage' in data) || (data.facebookPage is string && data.facebookPage.size() <= 200)) &&
+        (!('officeAddress' in data) || (data.officeAddress is string && data.officeAddress.size() <= 400)) &&
+        (!('termsAndConditions' in data) || (data.termsAndConditions is list && data.termsAndConditions.size() <= 20)) &&
+        (!('authorizedPersonName' in data) || (data.authorizedPersonName is string && data.authorizedPersonName.size() <= 150)) &&
+        (!('authorizedPersonDesignation' in data) || (data.authorizedPersonDesignation is string && data.authorizedPersonDesignation.size() <= 150)) &&
+        (!('authorizedSignatureUrl' in data) || (data.authorizedSignatureUrl is string && data.authorizedSignatureUrl.size() <= 800000)) &&
+        (!('signaturePosition' in data) || (data.signaturePosition is string && data.signaturePosition.size() <= 40)) &&
+        (!('signatureVisibility' in data) || data.signatureVisibility is bool) &&
+        (!('validityYears' in data) || (data.validityYears is number && data.validityYears >= 1 && data.validityYears <= 20)) &&
+        data.updatedBy is string && data.updatedBy.size() <= 128;
+    }
+
     // =========================================================================
     // COLLECTION 1: /users/{userId}
     // Prevents privilege escalation, Manager self-role/dept change, and Admin modifying Super Admin
@@ -488,6 +518,19 @@ service cloud.firestore {
       allow create: if hasValidSession() && isValidId(settingId) && isValidSettings(incoming()) &&
         isAdminOrSuper();
       allow update: if hasValidSession() && isValidId(settingId) && isValidSettings(incoming()) &&
+        isAdminOrSuper();
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // COLLECTION 14: /id_card_settings/{settingId} (Super Admin ID Card Config)
+    // =========================================================================
+    match /id_card_settings/{settingId} {
+      allow get: if hasValidSession() && isValidId(settingId);
+      allow list: if hasValidSession() && (resource == null || existing().size() >= 0);
+      allow create: if hasValidSession() && isValidId(settingId) && isValidIdCardSettings(incoming()) &&
+        isAdminOrSuper();
+      allow update: if hasValidSession() && isValidId(settingId) && isValidIdCardSettings(incoming()) &&
         isAdminOrSuper();
       allow delete: if false;
     }

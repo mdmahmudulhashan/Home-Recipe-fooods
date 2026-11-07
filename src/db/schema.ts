@@ -65,6 +65,15 @@ export const employees = pgTable('employees', {
   monthlyBonus: numeric('monthly_bonus', { precision: 12, scale: 2 }).notNull().default('0'),
   currentAddress: text('current_address').default(''),
   permanentAddress: text('permanent_address').default(''),
+  terminationDate: text('termination_date'), // YYYY-MM-DD
+  terminationType: text('termination_type'), // 'চাকরি থেকে বরখাস্ত' | 'স্বেচ্ছায় পদত্যাগ' | 'চাকরি থেকে অব্যাহতি' | 'চুক্তির মেয়াদ শেষ' | 'অন্যান্য'
+  terminationReason: text('termination_reason'),
+  terminationNotes: text('termination_notes'),
+  terminatedByName: text('terminated_by_name'),
+  terminatedAt: timestamp('terminated_at'),
+  finalSalarySettled: boolean('final_salary_settled').default(false),
+  settledAt: timestamp('settled_at'),
+  rehireHistory: text('rehire_history').default('[]'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

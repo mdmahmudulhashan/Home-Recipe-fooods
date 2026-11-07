@@ -241,6 +241,42 @@ export const employeeService = {
     fileUploadService.deleteEmployeePhoto(employee.employeeCode).catch(() => {});
     return res;
   },
+
+  async terminate(
+    apiFetch: ApiFetcher,
+    id: number,
+    payload: {
+      terminationDate: string;
+      terminationType: string;
+      reason: string;
+      notes?: string;
+    }
+  ) {
+    return await apiFetch<any>(`/api/employees/${id}/terminate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async rehire(
+    apiFetch: ApiFetcher,
+    id: number,
+    payload: {
+      newJoiningDate: string;
+      notes?: string;
+    }
+  ) {
+    return await apiFetch<any>(`/api/employees/${id}/rehire`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async settleFinalSalary(apiFetch: ApiFetcher, id: number) {
+    return await apiFetch<any>(`/api/employees/${id}/settle-final-salary`, {
+      method: 'POST',
+    });
+  },
 };
 
 // ============================================================================
@@ -586,3 +622,26 @@ export const settingsService = {
     });
   },
 };
+
+// ============================================================================
+// 13. ID CARD SERVICE
+// ============================================================================
+export const idCardService = {
+  async getSettings(apiFetch: ApiFetcher) {
+    return apiFetch<any>('/api/id-card/settings');
+  },
+
+  async updateSettings(apiFetch: ApiFetcher, payload: Record<string, any>) {
+    return await apiFetch<any>('/api/id-card/settings', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async verifyPublicEmployee(code: string) {
+    return await handleStandaloneApiRequest(`/api/id-card/verify/${encodeURIComponent(code)}`, {
+      method: 'GET',
+    });
+  },
+};
+

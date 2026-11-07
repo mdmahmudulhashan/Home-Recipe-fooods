@@ -18,6 +18,7 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
+  CreditCard,
 } from 'lucide-react';
 import { AuthProvider, useAuth, UserRole } from './context/AuthContext.tsx';
 import { LoginView } from './views/LoginView.tsx';
@@ -28,6 +29,8 @@ import { LeavesView, AbsencesView } from './views/AttendanceViews.tsx';
 import { SnacksView, AdvancesView } from './views/DeductionViews.tsx';
 import { SalarySheetView } from './views/SalarySheetView.tsx';
 import { ReportsView } from './views/ReportsView.tsx';
+import { IdCardViews } from './views/IdCardViews.tsx';
+import { PublicVerificationView } from './views/PublicVerificationView.tsx';
 import {
   UsersPermissionView,
   ActivityLogsView,
@@ -58,6 +61,13 @@ const NAV_MODULES: NavModule[] = [
     path: '/employees',
     label: 'কর্মচারীগণ',
     icon: Users,
+    allowedRoles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'],
+  },
+  {
+    id: 'id-card',
+    path: '/id-card',
+    label: 'আইডি কার্ড',
+    icon: CreditCard,
     allowedRoles: ['SUPER_ADMIN', 'ADMIN', 'MANAGER'],
   },
   {
@@ -334,6 +344,12 @@ const MainAppShell: React.FC = () => {
               কর্মচারীগণ
             </button>
             <button
+              onClick={() => navigateTo('id-card')}
+              className="hover:text-[#ea580c] hover:underline transition-colors whitespace-nowrap font-semibold text-[#ea580c]"
+            >
+              আইডি কার্ড
+            </button>
+            <button
               onClick={() => navigateTo('absences')}
               className="hover:text-slate-900 hover:underline transition-colors whitespace-nowrap"
             >
@@ -442,6 +458,12 @@ const MainAppShell: React.FC = () => {
                   showToast={showToast}
                 />
               )}
+              {activeModule === 'id-card' && (
+                <IdCardViews
+                  showToast={showToast}
+                  onSelectEmployee={(id) => setSelectedEmployeeId(id)}
+                />
+              )}
               {activeModule === 'reports' && (
                 <ReportsView
                   onSelectEmployee={(id) => setSelectedEmployeeId(id)}
@@ -472,6 +494,22 @@ const MainAppShell: React.FC = () => {
 };
 
 export default function App() {
+  const currentPath = window.location.pathname;
+  if (
+    currentPath.startsWith('/verify-id/') ||
+    currentPath.startsWith('/verify-employee/')
+  ) {
+    const code = decodeURIComponent(
+      currentPath.replace('/verify-id/', '').replace('/verify-employee/', '')
+    );
+    return (
+      <PublicVerificationView
+        employeeCode={code}
+        onNavigateHome={() => (window.location.href = '/')}
+      />
+    );
+  }
+
   return (
     <AuthProvider>
       <MainAppShell />

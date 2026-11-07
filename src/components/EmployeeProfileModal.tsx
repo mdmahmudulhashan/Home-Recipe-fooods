@@ -12,6 +12,9 @@ import {
   Clock,
   Wallet,
   Coffee,
+  UserX,
+  UserPlus,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.tsx';
 import { employeeService } from '../services/firebaseServices.ts';
@@ -21,6 +24,9 @@ import {
   getLeaveTypeLabel,
   getMonthLabel,
 } from '../utils/formatters.ts';
+import { TerminationModal } from './TerminationModal.tsx';
+import { FinalSettlementSlipModal } from './FinalSettlementSlipModal.tsx';
+import { RehireModal } from './RehireModal.tsx';
 
 interface EmployeeProfileModalProps {
   employeeId: number | null;
@@ -39,14 +45,24 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
     'overview' | 'leaves' | 'absences' | 'advances' | 'snacks' | 'salary'
   >('overview');
 
+  const [terminateOpen, setTerminateOpen] = useState(false);
+  const [settlementOpen, setSettlementOpen] = useState(false);
+  const [rehireOpen, setRehireOpen] = useState(false);
+  const [profileToast, setProfileToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setProfileToast({ message, type });
+    setTimeout(() => {
+      setProfileToast(null);
+    }, 5000);
+  };
+
   const isManager = user?.role === 'MANAGER';
 
-  useEffect(() => {
+  const loadProfileData = () => {
     if (!employeeId) return;
     setLoading(true);
     setError('');
-    setActiveTab('overview');
-
     employeeService
       .getProfile(apiFetch, employeeId)
       .then((res) => {
@@ -58,6 +74,11 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
       .finally(() => {
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    setActiveTab('overview');
+    loadProfileData();
   }, [employeeId, apiFetch]);
 
   if (!employeeId) return null;
@@ -86,6 +107,25 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6">
+          {profileToast && (
+            <div
+              className={`mb-4 p-3 rounded-lg border text-xs flex items-center justify-between ${
+                profileToast.type === 'error'
+                  ? 'bg-rose-50 border-rose-300 text-rose-800'
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-800'
+              }`}
+            >
+              <span>{profileToast.message}</span>
+              <button
+                type="button"
+                onClick={() => setProfileToast(null)}
+                className="ml-2 font-bold hover:opacity-70"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {loading && (
             <div className="py-12 text-center text-slate-500">
               কর্মচারীর তথ্য লোড হচ্ছে...
@@ -100,6 +140,60 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
 
           {!loading && !error && emp && (
             <div className="space-y-6">
+              {/* Terminated Employee Alert & Action Banner */}
+              {emp.employmentStatus === 'Terminated' || Boolean(emp.terminationDate) ? (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-rose-600 text-white">
+                        অব্যাহতিপ্রাপ্ত (Terminated)
+                      </span>
+                      <span className="text-xs font-semibold text-rose-950">
+                        শেষ কর্মদিবস: <strong className="font-mono-num text-rose-700">{emp.terminationDate || '-'}</strong>
+                      </span>
+                      <span className="text-xs text-rose-800 font-medium">
+                        ({emp.terminationType || 'চাকরি থেকে অব্যাহতি'})
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-800">
+                      কারণ: <span className="font-medium text-slate-900">{emp.terminationReason || 'নিয়মিত অব্যাহতি'}</span>
+                      {emp.terminationNotes && ` · নোট: ${emp.terminationNotes}`}
+                    </p>
+                    <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-3 pt-0.5">
+                      <span>অনুমোদনকারী: <strong className="text-slate-800">{emp.terminatedByName || 'Admin'}</strong></span>
+                      <span>·</span>
+                      <span>
+                        অবস্থা:{' '}
+                        {emp.finalSalarySettled ? (
+                          <strong className="text-emerald-700">চূড়ান্ত বেতন পরিশোধিত (PAID)</strong>
+                        ) : (
+                          <strong className="text-rose-700 font-bold">বকেয়া চূড়ান্ত বেতন (PENDING)</strong>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setSettlementOpen(true)}
+                      className="px-3 py-1.5 text-xs font-semibold text-blue-900 bg-blue-100 hover:bg-blue-200 rounded-lg flex items-center gap-1.5 transition-colors shadow-xs"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-blue-700" />
+                      <span>চূড়ান্ত বেতন পে-স্লিপ / রসিদ</span>
+                    </button>
+                    {!isManager && (
+                      <button
+                        onClick={() => setRehireOpen(true)}
+                        className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg flex items-center gap-1.5 transition-colors shadow-xs"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>পুনর্বহাল (Rehire)</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
               {/* Top Identity Summary */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
                 <div className="flex items-center gap-4">
@@ -138,6 +232,8 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
                               ? 'text-emerald-700'
                               : emp.todayStatus === 'ABSENT'
                               ? 'text-red-600'
+                              : emp.todayStatus === 'TERMINATED'
+                              ? 'text-rose-700'
                               : 'text-amber-600'
                           }
                         >
@@ -147,6 +243,8 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
                             ? 'অনুপস্থিত'
                             : emp.todayStatus === 'LEAVE'
                             ? 'ছুটিতে'
+                            : emp.todayStatus === 'TERMINATED'
+                            ? 'অব্যাহতিপ্রাপ্ত'
                             : 'নিষ্ক্রিয়'}
                         </strong>
                       </span>
@@ -154,17 +252,29 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
                   </div>
                 </div>
 
-                {!isManager && (
-                  <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-right">
-                    <div className="text-xs text-slate-500">মূল বেতন ({emp.salaryType})</div>
-                    <div className="text-lg font-bold font-mono-num text-slate-900">
-                      {formatTaka(emp.basicSalary)}
+                <div className="flex flex-col sm:flex-row items-end gap-2.5">
+                  {!isManager && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-right">
+                      <div className="text-xs text-slate-500">মূল বেতন ({emp.salaryType})</div>
+                      <div className="text-lg font-bold font-mono-num text-slate-900">
+                        {formatTaka(emp.basicSalary)}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        মাসিক বোনাস: <span className="font-mono-num">{formatTaka(emp.monthlyBonus)}</span>
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      মাসিক বোনাস: <span className="font-mono-num">{formatTaka(emp.monthlyBonus)}</span>
-                    </div>
-                  </div>
-                )}
+                  )}
+                  {!isManager && emp.employmentStatus !== 'Terminated' && !emp.terminationDate && (
+                    <button
+                      onClick={() => setTerminateOpen(true)}
+                      className="px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg flex items-center gap-1.5 transition-colors"
+                      title="কর্মচারীকে চাকরি থেকে অব্যাহতি দিন"
+                    >
+                      <UserX className="w-3.5 h-3.5" />
+                      <span>অব্যাহতি দিন</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Interactive Tabs */}
@@ -237,101 +347,181 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
               </div>
 
               {/* Tab Content: Overview */}
-              {activeTab === 'overview' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">
-                      ব্যক্তিগত ও যোগাযোগের তথ্য
-                    </h4>
-                    <div className="space-y-3 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 flex items-center gap-2">
-                          <User className="w-4 h-4" /> Employee ID
-                        </span>
-                        <span className="font-mono-num font-medium text-slate-900">
-                          {emp.employeeCode}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 flex items-center gap-2">
-                          <Phone className="w-4 h-4" /> মোবাইল নম্বর
-                        </span>
-                        <span className="font-mono-num font-medium text-slate-900">
-                          {emp.mobile}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 flex items-center gap-2">
-                          <Phone className="w-4 h-4 text-amber-600" /> জরুরী যোগাযোগ
-                        </span>
-                        <span className="font-mono-num font-medium text-slate-900">
-                          {emp.emergencyContact || 'প্রদান করা হয়নি'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 flex items-center gap-2">
-                          <Mail className="w-4 h-4" /> Email
-                        </span>
-                        <span className="text-slate-900">{emp.email || 'প্রদান করা হয়নি'}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 flex items-center gap-2">
-                          <CreditCard className="w-4 h-4" /> NID নম্বর
-                        </span>
-                        <span className="font-mono-num text-slate-900">
-                          {emp.nid || 'প্রদান করা হয়নি'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 flex items-center gap-2">
-                          <Calendar className="w-4 h-4" /> জন্ম তারিখ
-                        </span>
-                        <span className="font-mono-num text-slate-900">
-                          {emp.dateOfBirth || 'প্রদান করা হয়নি'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+              {activeTab === 'overview' && (() => {
+                let parsedRehireHistory: any[] = [];
+                try {
+                  parsedRehireHistory =
+                    typeof emp.rehireHistory === 'string'
+                      ? JSON.parse(emp.rehireHistory)
+                      : Array.isArray(emp.rehireHistory)
+                      ? emp.rehireHistory
+                      : [];
+                } catch {
+                  parsedRehireHistory = [];
+                }
 
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">
-                      চাকরি ও ঠিকানা সংক্রান্ত তথ্য
-                    </h4>
-                    <div className="space-y-3 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 flex items-center gap-2">
-                          <Briefcase className="w-4 h-4" /> বিভাগ ও পদবি
-                        </span>
-                        <span className="font-medium text-slate-900">
-                          {emp.departmentName} · {emp.designationName}
-                        </span>
+                return (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">
+                          ব্যক্তিগত ও যোগাযোগের তথ্য
+                        </h4>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 flex items-center gap-2">
+                              <User className="w-4 h-4" /> Employee ID
+                            </span>
+                            <span className="font-mono-num font-medium text-slate-900">
+                              {emp.employeeCode}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 flex items-center gap-2">
+                              <Phone className="w-4 h-4" /> মোবাইল নম্বর
+                            </span>
+                            <span className="font-mono-num font-medium text-slate-900">
+                              {emp.mobile}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 flex items-center gap-2">
+                              <Phone className="w-4 h-4 text-amber-600" /> জরুরী যোগাযোগ
+                            </span>
+                            <span className="font-mono-num font-medium text-slate-900">
+                              {emp.emergencyContact || 'প্রদান করা হয়নি'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 flex items-center gap-2">
+                              <Mail className="w-4 h-4" /> Email
+                            </span>
+                            <span className="text-slate-900">{emp.email || 'প্রদান করা হয়নি'}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 flex items-center gap-2">
+                              <CreditCard className="w-4 h-4" /> NID নম্বর
+                            </span>
+                            <span className="font-mono-num text-slate-900">
+                              {emp.nid || 'প্রদান করা হয়নি'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 flex items-center gap-2">
+                              <User className="w-4 h-4 text-[#ea580c]" /> রক্তের গ্রুপ
+                            </span>
+                            <span className="font-bold text-[#ea580c]">
+                              {emp.bloodGroup || 'A+'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 flex items-center gap-2">
+                              <Calendar className="w-4 h-4" /> জন্ম তারিখ
+                            </span>
+                            <span className="font-mono-num text-slate-900">
+                              {emp.dateOfBirth || 'প্রদান করা হয়নি'}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 flex items-center gap-2">
-                          <Clock className="w-4 h-4" /> যোগদানের তারিখ
-                        </span>
-                        <span className="font-mono-num text-slate-900">{emp.joiningDate}</span>
-                      </div>
-                      <div className="flex items-start justify-between gap-4">
-                        <span className="text-slate-500 flex items-center gap-2 shrink-0">
-                          <MapPin className="w-4 h-4" /> বর্তমান ঠিকানা
-                        </span>
-                        <span className="text-slate-900 text-right">
-                          {emp.currentAddress || 'প্রদান করা হয়নি'}
-                        </span>
-                      </div>
-                      <div className="flex items-start justify-between gap-4">
-                        <span className="text-slate-500 flex items-center gap-2 shrink-0">
-                          <MapPin className="w-4 h-4" /> স্থায়ী ঠিকানা
-                        </span>
-                        <span className="text-slate-900 text-right">
-                          {emp.permanentAddress || 'প্রদান করা হয়নি'}
-                        </span>
+
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">
+                          চাকরি ও ঠিকানা সংক্রান্ত তথ্য
+                        </h4>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 flex items-center gap-2">
+                              <Briefcase className="w-4 h-4" /> বিভাগ ও পদবি
+                            </span>
+                            <span className="font-medium text-slate-900">
+                              {emp.departmentName} · {emp.designationName}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 flex items-center gap-2">
+                              <Clock className="w-4 h-4" /> বর্তমান যোগদানের তারিখ
+                            </span>
+                            <span className="font-mono-num text-slate-900">{emp.joiningDate}</span>
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-slate-500 flex items-center gap-2 shrink-0">
+                              <MapPin className="w-4 h-4" /> বর্তমান ঠিকানা
+                            </span>
+                            <span className="text-slate-900 text-right">
+                              {emp.currentAddress || 'প্রদান করা হয়নি'}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-slate-500 flex items-center gap-2 shrink-0">
+                              <MapPin className="w-4 h-4" /> স্থায়ী ঠিকানা
+                            </span>
+                            <span className="text-slate-900 text-right">
+                              {emp.permanentAddress || 'প্রদান করা হয়নি'}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
+
+                    {/* Previous Employment Tenures History Table */}
+                    {parsedRehireHistory.length > 0 && (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden mt-4">
+                        <div className="bg-slate-50 px-4 py-2.5 font-bold text-slate-800 text-xs border-b border-slate-200 flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-emerald-700" />
+                          <span>পূর্ববর্তী চাকুরির ইতিহাস ও কর্মমেয়াদ (Previous Employment Tenures)</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-slate-100 text-slate-700 border-b border-slate-200">
+                              <tr>
+                                <th className="py-2.5 px-3">মেয়াদ নং</th>
+                                <th className="py-2.5 px-3">পূর্বের যোগদানের তারিখ</th>
+                                <th className="py-2.5 px-3">শেষ কর্মদিবস</th>
+                                <th className="py-2.5 px-3">অব্যাহতির ধরন ও কারণ</th>
+                                <th className="py-2.5 px-3">পুনর্বহালের তারিখ ও নোট</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200">
+                              {parsedRehireHistory.map((h: any, i: number) => (
+                                <tr key={i} className="hover:bg-slate-50">
+                                  <td className="py-2.5 px-3 font-mono-num font-semibold text-slate-700">
+                                    #{i + 1}
+                                  </td>
+                                  <td className="py-2.5 px-3 font-mono-num">{h.joiningDate || '-'}</td>
+                                  <td className="py-2.5 px-3 font-mono-num text-rose-700 font-semibold">
+                                    {h.terminationDate || '-'}
+                                  </td>
+                                  <td className="py-2.5 px-3">
+                                    <span className="font-semibold text-slate-800">
+                                      {h.terminationType || 'অব্যাহতি'}
+                                    </span>
+                                    {h.terminationReason && (
+                                      <div className="text-[11px] text-slate-500 italic mt-0.5">
+                                        {h.terminationReason}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="py-2.5 px-3">
+                                    <span className="font-mono-num text-emerald-700 font-semibold">
+                                      {h.rehiredAt?.split('T')[0] || '-'}
+                                    </span>
+                                    {h.rehireNotes && (
+                                      <div className="text-[11px] text-slate-500 mt-0.5">
+                                        {h.rehireNotes}
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Tab Content: Leaves */}
               {activeTab === 'leaves' && (
@@ -599,6 +789,45 @@ export const EmployeeProfileModal: React.FC<EmployeeProfileModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Employee Termination Modal */}
+      {emp && (
+        <TerminationModal
+          employee={emp}
+          open={terminateOpen}
+          onClose={() => setTerminateOpen(false)}
+          onSuccess={() => {
+            loadProfileData();
+          }}
+          showToast={showToast}
+        />
+      )}
+
+      {/* Final Settlement Slip & Voucher Modal */}
+      {emp && (
+        <FinalSettlementSlipModal
+          employee={emp}
+          open={settlementOpen}
+          onClose={() => setSettlementOpen(false)}
+          onSuccess={() => {
+            loadProfileData();
+          }}
+          showToast={(_msg, _type) => {}}
+        />
+      )}
+
+      {/* Rehire Employee Modal */}
+      {emp && (
+        <RehireModal
+          employee={emp}
+          open={rehireOpen}
+          onClose={() => setRehireOpen(false)}
+          onSuccess={() => {
+            loadProfileData();
+          }}
+          showToast={(_msg, _type) => {}}
+        />
+      )}
     </div>
   );
 };

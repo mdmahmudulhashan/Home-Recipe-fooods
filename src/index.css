@@ -11,12 +11,8 @@
   }
 }
 
-/* Legal Landscape Print Styling for Salary Sheet & Reports */
+/* General Print Styling */
 @media print {
-  @page {
-    size: legal landscape;
-    margin: 10mm 12mm;
-  }
 
   body {
     background: #ffffff !important;

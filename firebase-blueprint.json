@@ -69,6 +69,7 @@
         "profilePhotoUrl": { "type": "string", "maxLength": 2000 },
         "mobile": { "type": "string", "maxLength": 40 },
         "emergencyContact": { "type": "string", "maxLength": 100 },
+        "bloodGroup": { "type": "string", "maxLength": 10 },
         "email": { "type": "string", "maxLength": 150 },
         "nid": { "type": "string", "maxLength": 60 },
         "dateOfBirth": { "type": "string", "maxLength": 20 },
@@ -85,6 +86,16 @@
         "monthlyBonus": { "type": "number" },
         "currentAddress": { "type": "string", "maxLength": 300 },
         "permanentAddress": { "type": "string", "maxLength": 300 },
+        "terminationDate": { "type": "string", "maxLength": 40 },
+        "terminationType": { "type": "string", "maxLength": 100 },
+        "terminationReason": { "type": "string", "maxLength": 600 },
+        "terminationNotes": { "type": "string", "maxLength": 1000 },
+        "terminatedByName": { "type": "string", "maxLength": 200 },
+        "terminatedAt": { "type": "string", "format": "date-time" },
+        "finalSalarySettled": { "type": "boolean" },
+        "settledAt": { "type": "string", "format": "date-time" },
+        "settledByName": { "type": "string", "maxLength": 200 },
+        "rehireHistory": { "type": "string", "maxLength": 10000 },
         "createdBy": { "type": "string", "maxLength": 128 },
         "updatedBy": { "type": "string", "maxLength": 128 },
         "createdAt": { "type": "string", "format": "date-time" },
@@ -255,6 +266,29 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["companyName", "companyAddress", "standardMonthDays"]
+    },
+    "IdCardSettings": {
+      "title": "IdCardSettings",
+      "description": "Customizable configuration for company ID card template and authorized signature",
+      "type": "object",
+      "properties": {
+        "companyName": { "type": "string", "maxLength": 150 },
+        "companyLogo": { "type": "string", "maxLength": 750000 },
+        "companyEmail": { "type": "string", "maxLength": 150 },
+        "companyPhone": { "type": "string", "maxLength": 50 },
+        "facebookPage": { "type": "string", "maxLength": 150 },
+        "officeAddress": { "type": "string", "maxLength": 300 },
+        "termsAndConditions": { "type": "array", "items": { "type": "string" } },
+        "authorizedPersonName": { "type": "string", "maxLength": 100 },
+        "authorizedPersonDesignation": { "type": "string", "maxLength": 100 },
+        "authorizedSignatureUrl": { "type": "string", "maxLength": 750000 },
+        "signaturePosition": { "type": "string", "maxLength": 20 },
+        "signatureVisibility": { "type": "boolean" },
+        "validityYears": { "type": "number" },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyName", "companyEmail", "companyPhone"]
     }
   },
   "firestore": {
@@ -309,6 +343,10 @@
     "/settings/{settingId}": {
       "schema": { "$ref": "#/entities/Settings" },
       "description": "Global company and salary settings"
+    },
+    "/id_card_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/IdCardSettings" },
+      "description": "ID card visual template and authorized signature settings"
     }
   }
 }
