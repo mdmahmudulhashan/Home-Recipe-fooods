@@ -122,7 +122,7 @@ export async function generateOfflineQrDataUrl(
     margin: options.margin ?? 2,
     errorCorrectionLevel: options.errorCorrectionLevel || 'M',
     color: {
-      dark: '#38251D', // Dark Coffee Brown pattern
+      dark: '#222222', // Deep Charcoal pattern with maximum contrast on pure white
       light: '#FFFFFF', // Pure White quiet zone & background
     },
   });

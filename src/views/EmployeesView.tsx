@@ -20,6 +20,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.tsx';
 import { TerminationModal } from '../components/TerminationModal.tsx';
 import { FinalSettlementSlipModal } from '../components/FinalSettlementSlipModal.tsx';
 import { RehireModal } from '../components/RehireModal.tsx';
+import { OptimizedImageUploader } from '../components/OptimizedImageUploader.tsx';
 import {
   employeeService,
   departmentService,
@@ -35,6 +36,10 @@ const initialForm = {
   employeeCode: '',
   fullName: '',
   photoUrl: '',
+  photoStoragePath: '',
+  photoFileType: '',
+  photoOriginalSize: 0,
+  photoCompressedSize: 0,
   mobile: '',
   emergencyContact: '',
   bloodGroup: 'A+',
@@ -184,6 +189,10 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       employeeCode: emp.employeeCode,
       fullName: emp.fullName,
       photoUrl: emp.photoUrl || '',
+      photoStoragePath: emp.photoStoragePath || '',
+      photoFileType: emp.photoFileType || '',
+      photoOriginalSize: emp.photoOriginalSize || 0,
+      photoCompressedSize: emp.photoCompressedSize || 0,
       mobile: emp.mobile,
       emergencyContact: emp.emergencyContact || '',
       bloodGroup: emp.bloodGroup || 'A+',
@@ -905,63 +914,41 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono-num"
                   />
                 </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    প্রোফাইল ছবি আপলোড (ঐচ্ছিক)
-                  </label>
-                  <div className="flex items-center gap-3">
-                    {formData.photoUrl ? (
-                      <div className="relative w-10 h-10 shrink-0">
-                        <img
-                          src={formData.photoUrl}
-                          alt="Preview"
-                          referrerPolicy="no-referrer"
-                          className="w-10 h-10 rounded-lg object-cover border border-slate-300"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, photoUrl: '' })}
-                          title="ছবি মুছে ফেলুন"
-                          className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 text-white flex items-center justify-center text-[10px]"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-400 shrink-0">
-                        <Upload className="w-4 h-4" />
-                      </div>
-                    )}
-                    <label className="flex-1 cursor-pointer">
-                      <span className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium flex items-center justify-center gap-1.5 transition-colors">
-                        <Upload className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>{formData.photoUrl ? 'ছবি পরিবর্তন করুন' : 'ছবি নির্বাচন করুন'}</span>
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          if (file.size > 2 * 1024 * 1024) {
-                            showToast('ছবির সাইজ সর্বোচ্চ ২ মেগাবাইট (2MB) হতে পারবে।', 'error');
-                            return;
-                          }
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            if (typeof reader.result === 'string') {
-                              setFormData((prev) => ({
-                                ...prev,
-                                photoUrl: reader.result as string,
-                              }));
-                            }
-                          };
-                          reader.readAsDataURL(file);
-                        }}
-                      />
-                    </label>
-                  </div>
+                <div className="col-span-1 sm:col-span-2">
+                  <OptimizedImageUploader
+                    label="প্রোফাইল ছবি (Profile Photo — সর্বোচ্চ ২০ MB)"
+                    category="EMPLOYEE_PROFILE"
+                    storageFolder={`employee-photos/${(formData.employeeCode || 'draft').replace(/[^a-zA-Z0-9_-]/g, '_')}`}
+                    currentImageUrl={formData.photoUrl}
+                    currentStoragePath={formData.photoStoragePath}
+                    customFileName="profile"
+                    disabled={submitting}
+                    compact
+                    aspectRatioHint="1:1 স্কয়ার (Clear Face & Natural Color)"
+                    onUploadSuccess={(res) => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        photoUrl: res.downloadUrl,
+                        photoStoragePath: res.storagePath,
+                        photoFileType: res.fileType,
+                        photoOriginalSize: res.originalSize,
+                        photoCompressedSize: res.compressedSize,
+                      }));
+                      showToast(`ছবি সফলভাবে অপটিমাইজ ও সংরক্ষণ হয়েছে (${res.savingsPercent}% সাইজ কমেছে)!`, 'success');
+                    }}
+                    onImageRemove={() => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        photoUrl: '',
+                        photoStoragePath: '',
+                        photoFileType: '',
+                        photoOriginalSize: 0,
+                        photoCompressedSize: 0,
+                      }));
+                      showToast('প্রোফাইল ছবি সরানো হয়েছে।', 'success');
+                    }}
+                    onError={(err) => showToast(err, 'error')}
+                  />
                 </div>
 
                 <div>

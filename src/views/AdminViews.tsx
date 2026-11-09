@@ -9,7 +9,9 @@ import {
   activityLogService,
   settingsService,
   authService,
+  idCardService,
 } from '../services/firebaseServices.ts';
+import { OptimizedImageUploader } from '../components/OptimizedImageUploader.tsx';
 
 interface AdminViewProps {
   showToast: (msg: string, type?: 'success' | 'error') => void;
@@ -526,6 +528,7 @@ export const SettingsView: React.FC<AdminViewProps> = ({ showToast }) => {
   const [standardMonthDays, setStandardMonthDays] = useState(30);
   const [fridayOvertimeEnabled, setFridayOvertimeEnabled] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [companyLogo, setCompanyLogo] = useState('');
 
   useEffect(() => {
     settingsService
@@ -537,6 +540,15 @@ export const SettingsView: React.FC<AdminViewProps> = ({ showToast }) => {
         setCompanyEmail(res.companyEmail || '');
         setStandardMonthDays(res.standardMonthDays || 30);
         setFridayOvertimeEnabled(res.fridayOvertimeEnabled !== false);
+      })
+      .catch(() => {});
+
+    idCardService
+      .getSettings(apiFetch)
+      .then((res) => {
+        if (res?.companyLogo) {
+          setCompanyLogo(res.companyLogo);
+        }
       })
       .catch(() => {});
   }, [apiFetch]);
@@ -665,6 +677,40 @@ export const SettingsView: React.FC<AdminViewProps> = ({ showToast }) => {
           </div>
 
           <form onSubmit={handleSaveCompanySettings} className="space-y-4 mt-5 text-xs">
+            {/* Company Logo Upload & Global Optimization */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <OptimizedImageUploader
+                label="কোম্পানি লোগো (Company Logo — সর্বোচ্চ ২০ MB)"
+                category="COMPANY_LOGO"
+                storageFolder="company-assets"
+                customFileName="company_logo"
+                currentImageUrl={companyLogo}
+                aspectRatioHint="স্বচ্ছ ব্যাকগ্রাউন্ড PNG / WebP (Transparency সংরক্ষিত)"
+                onUploadSuccess={async (res) => {
+                  setCompanyLogo(res.downloadUrl);
+                  try {
+                    await idCardService.updateSettings(apiFetch, { companyLogo: res.downloadUrl });
+                    showToast(
+                      `কোম্পানি লোগো সফলভাবে অপটিমাইজ ও গ্লোবালি আপডেট হয়েছে (${res.savingsPercent}% সাইজ কমেছে)!`,
+                      'success'
+                    );
+                  } catch (err: any) {
+                    showToast(err.message || 'লোগো আপডেট ব্যর্থ হয়েছে।', 'error');
+                  }
+                }}
+                onImageRemove={async () => {
+                  setCompanyLogo('');
+                  try {
+                    await idCardService.updateSettings(apiFetch, { companyLogo: '' });
+                    showToast('কাস্টম লোগো সরানো হয়েছে। ডিফল্ট ভেক্টর লোগো সক্রিয়।', 'success');
+                  } catch (err: any) {
+                    showToast(err.message || 'লোগো সরাতে ব্যর্থ হয়েছে।', 'error');
+                  }
+                }}
+                onError={(err) => showToast(err, 'error')}
+              />
+            </div>
+
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
                 প্রতিষ্ঠানের নাম (Company Name)

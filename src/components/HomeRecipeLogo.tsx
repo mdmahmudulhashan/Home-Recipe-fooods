@@ -3,8 +3,8 @@ import React from 'react';
 interface HomeRecipeLogoProps {
   className?: string;
   customLogoUrl?: string;
-  variant?: 'light' | 'dark'; // light is for dark backgrounds, dark is for white backgrounds
-  size?: 'sm' | 'md' | 'lg';
+  variant?: 'light' | 'dark'; // light is for dark backgrounds, dark is for light backgrounds
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 }
 
 export const HomeRecipeLogo: React.FC<HomeRecipeLogoProps> = ({
@@ -13,10 +13,12 @@ export const HomeRecipeLogo: React.FC<HomeRecipeLogoProps> = ({
   size = 'md',
 }) => {
   if (customLogoUrl && customLogoUrl.trim()) {
-    const sizeClasses = {
+    const sizeClasses: Record<string, string> = {
       sm: 'h-7 max-w-[115px]',
       md: 'h-10 max-w-[165px]',
-      lg: 'h-16 max-w-[220px]',
+      lg: 'h-14 max-w-[215px]',
+      xl: 'h-16 max-w-[240px]',
+      '2xl': 'h-20 max-w-[275px]',
     };
     return (
       <div className={`flex items-center justify-center ${className}`}>
@@ -24,7 +26,7 @@ export const HomeRecipeLogo: React.FC<HomeRecipeLogoProps> = ({
           src={customLogoUrl}
           alt="Company Logo"
           referrerPolicy="no-referrer"
-          className={`${sizeClasses[size]} object-contain`}
+          className={`${sizeClasses[size] || sizeClasses.md} object-contain`}
         />
       </div>
     );
@@ -34,12 +36,14 @@ export const HomeRecipeLogo: React.FC<HomeRecipeLogoProps> = ({
   const dimensions = {
     sm: { width: 115, height: 36, iconSize: 30, titleSize: 20, subSize: 10 },
     md: { width: 165, height: 52, iconSize: 44, titleSize: 26, subSize: 13 },
-    lg: { width: 220, height: 72, iconSize: 60, titleSize: 36, subSize: 18 },
-  }[size];
+    lg: { width: 210, height: 65, iconSize: 55, titleSize: 34, subSize: 16 },
+    xl: { width: 235, height: 72, iconSize: 62, titleSize: 38, subSize: 18 },
+    '2xl': { width: 260, height: 80, iconSize: 68, titleSize: 42, subSize: 20 },
+  }[size] || { width: 165, height: 52, iconSize: 44, titleSize: 26, subSize: 13 };
 
   return (
     <div
-      className={`inline-flex items-center gap-2 select-none ${className}`}
+      className={`inline-flex items-center justify-center gap-2 select-none ${className}`}
       style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.25))' }}
     >
       <svg

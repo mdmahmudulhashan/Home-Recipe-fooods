@@ -48,6 +48,7 @@ import {
   IdCardEmployeeData,
 } from '../components/IdCardPreview.tsx';
 import { HomeRecipeLogo } from '../components/HomeRecipeLogo.tsx';
+import { OptimizedImageUploader } from '../components/OptimizedImageUploader.tsx';
 import {
   CloudIdCardSettings,
   DEFAULT_ID_CARD_SETTINGS,
@@ -534,18 +535,18 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
               </button>
             </div>
 
-            <div className="bg-gradient-to-br from-[#38251D] via-[#493025] to-[#38251D] text-white rounded-xl p-6 shadow-md flex flex-col justify-between border border-[#D6B477]/40">
+            <div className="bg-gradient-to-br from-[#244B38] via-[#397653] to-[#244B38] text-white rounded-xl p-6 shadow-md flex flex-col justify-between border border-[#C9B77B]/40">
               <div>
-                <div className="w-10 h-10 rounded-lg bg-white/10 backdrop-blur-xs flex items-center justify-center text-[#D6B477] mb-4 border border-[#D6B477]/40">
+                <div className="w-10 h-10 rounded-lg bg-white/10 backdrop-blur-xs flex items-center justify-center text-[#C9B77B] mb-4 border border-[#C9B77B]/40">
                   <QrCode className="w-5 h-5" />
                 </div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-bold text-base text-white">১০০% অফলাইন কিউআর কোড</h3>
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#D6B477]/20 text-[#D6B477] border border-[#D6B477]/50">
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#C9B77B]/20 text-[#C9B77B] border border-[#C9B77B]/50">
                     No Internet Required
                   </span>
                 </div>
-                <p className="text-xs text-[#F3E8D6]/90 mt-1.5 leading-relaxed">
+                <p className="text-xs text-[#EAF5E9]/90 mt-1.5 leading-relaxed">
                   কোনো ওয়েবসাইট লিংক বা অনলাইন রিকোয়েস্ট ছাড়াই প্রতিটি কার্ডের কিউআর কোডে কর্মচারীর পরিচয় সরাসরি এনকোড করা। যেকোনো সাধারণ মোবাইল ক্যামেরা দিয়ে তাৎক্ষণিক স্ক্যান হবে।
                 </p>
               </div>
@@ -557,7 +558,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                     showToast('কোনো কর্মচারী ডাটা নেই', 'error');
                   }
                 }}
-                className="mt-6 w-full py-2.5 px-4 bg-gradient-to-r from-[#D6B477] to-[#B98250] hover:from-[#c5a366] hover:to-[#a77343] text-[#38251D] rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm"
+                className="mt-6 w-full py-2.5 px-4 bg-gradient-to-r from-[#C9B77B] to-[#A89454] hover:from-[#d5c58f] hover:to-[#968244] text-[#244B38] rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm"
               >
                 <QrCode className="w-4 h-4" />
                 <span>অফলাইন কিউআর ডেটা টেস্টার</span>
@@ -588,19 +589,19 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
             </div>
           </div>
 
-          {/* Live Sample Card Preview Box with Premium Teal Blue + Soft Aqua + Gold Showcase */}
+          {/* Live Sample Card Preview Box with Premium Light Green Showcase */}
           {employeesList.length > 0 && (
             <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-4 border-b border-slate-100 pb-3 gap-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-[#8B6348]" />
+                    <Sparkles className="w-4 h-4 text-[#F3841D]" />
                     <h3 className="text-sm font-bold text-slate-900">
-                      প্রিমিয়াম লাক্সারি ডার্ক কফি আইডি কার্ড ডিজাইন (Luxury Dark Coffee Edition)
+                      মডার্ন অ্যান্ড প্রফেশনাল আইডি কার্ড ডিজাইন (Modern & Professional Business Vector Edition)
                     </h3>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    রিচ ডার্ক কফি (#38251D), ডিপ এসপ্রেসো (#493025), ডার্ক মোকা (#624331), কফি ব্রোঞ্জ (#8B6348), শ্যাম্পেন গোল্ড (#D6B477), ওয়ার্ম ক্রিম ও আইভরি (নো পিওর ব্ল্যাক)
+                    ডার্ক চারকোল গ্রে (#464646), ভাইব্র্যান্ট অরেঞ্জ অ্যাকসেন্ট (#F3841D), ক্রিস্প হোয়াইট (#FFFFFF)
                   </p>
                 </div>
 
@@ -627,7 +628,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                       onClick={() => setDashboardPreviewSide('front')}
                       className={`px-3 py-1 rounded-md transition-colors ${
                         dashboardPreviewSide === 'front'
-                          ? 'bg-white shadow-xs text-[#38251D] font-bold'
+                          ? 'bg-white shadow-xs text-[#F3841D] font-bold'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
@@ -638,7 +639,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                       onClick={() => setDashboardPreviewSide('back')}
                       className={`px-3 py-1 rounded-md transition-colors ${
                         dashboardPreviewSide === 'back'
-                          ? 'bg-white shadow-xs text-[#38251D] font-bold'
+                          ? 'bg-white shadow-xs text-[#F3841D] font-bold'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
@@ -649,7 +650,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                       onClick={() => setDashboardPreviewSide('both')}
                       className={`px-3 py-1 rounded-md transition-colors ${
                         dashboardPreviewSide === 'both'
-                          ? 'bg-white shadow-xs text-[#38251D] font-bold'
+                          ? 'bg-white shadow-xs text-[#F3841D] font-bold'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
@@ -659,9 +660,9 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
 
                   <button
                     onClick={() => setPreviewEmployee(employeesList[dashboardEmployeeIndex] || employeesList[0])}
-                    className="px-3.5 py-1.5 bg-[#38251D] hover:bg-[#2a1b15] text-white border border-[#D6B477]/50 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors shadow-xs"
+                    className="px-3.5 py-1.5 bg-[#464646] hover:bg-[#333333] text-white border border-[#F3841D]/50 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors shadow-xs"
                   >
-                    <Eye className="w-3.5 h-3.5 text-[#D6B477]" />
+                    <Eye className="w-3.5 h-3.5 text-[#F3841D]" />
                     <span>ফুল স্ক্রিন প্রিভিউ</span>
                   </button>
                 </div>
@@ -669,21 +670,21 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
 
               {/* Design Spec Highlights */}
               <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                <div className="bg-[#38251D] text-white px-3 py-2 rounded-lg flex items-center gap-2 border border-[#D6B477]/40">
-                  <div className="w-2.5 h-2.5 rounded-full bg-[#D6B477]" />
-                  <span className="font-semibold text-white">রিচ ডার্ক কফি (#38251D)</span>
+                <div className="bg-[#464646] text-white px-3 py-2 rounded-lg flex items-center gap-2 border border-slate-600">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#F3841D]" />
+                  <span className="font-semibold text-white">ডার্ক চারকোল (#464646)</span>
                 </div>
-                <div className="bg-[#493025] text-white px-3 py-2 rounded-lg flex items-center gap-2 border border-[#D6B477]/30">
-                  <div className="w-2.5 h-2.5 rounded-full bg-[#F3E8D6]" />
-                  <span className="font-bold text-[#FFF9EF]">ডিপ এসপ্রেসো (#493025)</span>
+                <div className="bg-[#F3841D] text-white px-3 py-2 rounded-lg flex items-center gap-2 border border-orange-400">
+                  <div className="w-2.5 h-2.5 rounded-full bg-white" />
+                  <span className="font-bold text-white">ভাইব্র্যান্ট অরেঞ্জ (#F3841D)</span>
                 </div>
-                <div className="bg-[#8B6348] text-white px-3 py-2 rounded-lg flex items-center gap-2 border border-[#38251D]/30">
-                  <div className="w-2.5 h-2.5 rounded-full bg-[#FFF9EF]" />
-                  <span className="font-bold text-white">কফি ব্রোঞ্জ (#8B6348)</span>
+                <div className="bg-white text-slate-800 px-3 py-2 rounded-lg flex items-center gap-2 border border-slate-300">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#464646]" />
+                  <span className="font-bold text-slate-800">পিওর হোয়াইট (#FFFFFF)</span>
                 </div>
-                <div className="bg-[#F3E8D6] text-[#38251D] px-3 py-2 rounded-lg flex items-center gap-2 border border-[#D6B477]">
-                  <div className="w-2.5 h-2.5 rounded-full bg-[#D6B477]" />
-                  <span className="font-bold text-[#38251D]">শ্যাম্পেন গোল্ড (#D6B477)</span>
+                <div className="bg-orange-50 text-[#EA7611] px-3 py-2 rounded-lg flex items-center gap-2 border border-[#F3841D]/30">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#F3841D]" />
+                  <span className="font-bold text-[#EA7611]">অরেঞ্জ ওয়েভ রিবন</span>
                 </div>
               </div>
 
@@ -805,9 +806,9 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                     const selectedEmps = employeesList.filter((e) => selectedIds.includes(e.id));
                     openPrintStudio(selectedEmps, 'both');
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-[#38251D] to-[#493025] hover:from-[#2a1b15] hover:to-[#38251D] text-white rounded-md text-[11px] font-bold shadow-xs border border-[#D6B477]/50 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-[#244B38] to-[#397653] hover:from-[#1b382a] hover:to-[#244B38] text-white rounded-md text-[11px] font-bold shadow-xs border border-[#C9B77B]/50 transition-all"
                 >
-                  <Printer className="w-3.5 h-3.5 text-[#D6B477]" />
+                  <Printer className="w-3.5 h-3.5 text-[#C9B77B]" />
                   <span>নির্বাচিত {selectedIds.length} জনের বাল্ক প্রিন্ট ও PDF</span>
                 </button>
                 <button
@@ -951,7 +952,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                               <button
                                 onClick={() => openPrintStudio([emp], 'both')}
                                 title="প্রিন্ট ও পিডিএফ স্টুডিও"
-                                className="p-1.5 bg-slate-100 hover:bg-[#38251D] hover:text-[#D6B477] rounded-lg text-slate-700 transition-colors"
+                                className="p-1.5 bg-slate-100 hover:bg-[#244B38] hover:text-[#C9B77B] rounded-lg text-slate-700 transition-colors"
                               >
                                 <Printer className="w-4 h-4" />
                               </button>
@@ -961,7 +962,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                                 type="button"
                                 onClick={() => openOfflineQrModal(emp)}
                                 title="অফলাইন কিউআর ডেটা ও কোড দেখুন"
-                                className="p-1.5 bg-slate-100 hover:bg-[#38251D] hover:text-[#D6B477] rounded-lg text-slate-700 transition-colors"
+                                className="p-1.5 bg-slate-100 hover:bg-[#244B38] hover:text-[#C9B77B] rounded-lg text-slate-700 transition-colors"
                               >
                                 <QrCode className="w-4 h-4" />
                               </button>
@@ -1048,15 +1049,15 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                           <button
                             type="button"
                             onClick={() => openPrintStudio([emp], 'both')}
-                            className="flex-1 py-1.5 px-2 bg-gradient-to-r from-[#38251D] to-[#493025] hover:from-[#2a1b15] hover:to-[#38251D] text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-[#D6B477]/40"
+                            className="flex-1 py-1.5 px-2 bg-gradient-to-r from-[#244B38] to-[#397653] hover:from-[#1b382a] hover:to-[#244B38] text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-[#C9B77B]/40"
                           >
-                            <Printer className="w-3.5 h-3.5 text-[#D6B477]" />
+                            <Printer className="w-3.5 h-3.5 text-[#C9B77B]" />
                             <span>প্রিন্ট ও PDF</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => openOfflineQrModal(emp)}
-                            className="p-1.5 bg-slate-100 hover:bg-[#38251D] hover:text-[#D6B477] text-slate-700 rounded-lg transition-colors"
+                            className="p-1.5 bg-slate-100 hover:bg-[#244B38] hover:text-[#C9B77B] text-slate-700 rounded-lg transition-colors"
                             title="অফলাইন কিউআর ডেটা ও কোড দেখুন"
                           >
                             <QrCode className="w-3.5 h-3.5" />
@@ -1181,108 +1182,83 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Front Side Rich Dark Coffee Background Preview */}
-                  <div className="bg-[#38251D] rounded-xl p-4 flex flex-col items-center justify-center border border-[#D6B477]/50 shadow-inner min-h-[110px]">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#F3E8D6] mb-2">
-                      কার্ডের সামনের অংশ (Rich Dark Coffee #38251D Header)
+                  {/* Front Side Dark Charcoal Background Preview */}
+                  <div className="bg-[#3C3C3C] rounded-xl p-4 flex flex-col items-center justify-center border border-[#F3841D]/40 shadow-inner min-h-[110px]">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#FB923C] mb-2">
+                      কার্ডের সামনের অংশ (Dark Charcoal & Orange Header)
                     </span>
-                    <div className="py-2">
+                    <div className="py-2 flex justify-center w-full">
                       <HomeRecipeLogo
                         customLogoUrl={settingsForm.companyLogo}
-                        size="md"
+                        size="2xl"
                         variant="light"
+                        className="mx-auto"
                       />
                     </div>
                   </div>
 
-                  {/* Back Side Warm Cream / Ivory Background Preview */}
-                  <div className="bg-[#FFF9EF] rounded-xl p-4 flex flex-col items-center justify-center border border-[#D6B477]/40 shadow-xs min-h-[110px]">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#38251D] mb-2">
-                      কার্ডের পিছনের অংশ (Ivory #FFF9EF Body)
+                  {/* Back Side Dark Charcoal Background Preview */}
+                  <div className="bg-[#3C3C3C] rounded-xl p-4 flex flex-col items-center justify-center border border-[#F3841D]/40 shadow-xs min-h-[110px]">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#FB923C] mb-2">
+                      কার্ডের পিছনের অংশ (Dark Charcoal Header)
                     </span>
-                    <div className="py-2">
+                    <div className="py-2 flex justify-center w-full">
                       <HomeRecipeLogo
                         customLogoUrl={settingsForm.companyLogo}
-                        size="md"
-                        variant="dark"
+                        size="xl"
+                        variant="light"
+                        className="mx-auto"
                       />
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Logo Actions: Upload, Replace, Remove, Save Changes */}
-              <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-orange-100">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  {/* Upload / Replace Button */}
-                  <label className={`cursor-pointer ${!isSuperAdmin ? 'opacity-50 pointer-events-none' : ''}`}>
-                    <span className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-bold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-xs">
-                      <Upload className="w-4 h-4 text-[#ea580c]" />
-                      <span>{settingsForm.companyLogo ? 'Replace Logo (লোগো পরিবর্তন)' : 'Upload Logo (লোগো আপলোড)'}</span>
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={!isSuperAdmin}
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        if (file.size > 3 * 1024 * 1024) {
-                          showToast('ছবির সাইজ সর্বোচ্চ ৩ মেগাবাইট হতে পারবে।', 'error');
-                          return;
-                        }
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                          if (typeof reader.result === 'string') {
-                            setSettingsForm((prev) => ({
-                              ...prev,
-                              companyLogo: reader.result as string,
-                            }));
-                            showToast('নতুন লোগো নির্বাচন করা হয়েছে। স্থায়ী করতে "Save Changes" বাটনে চাপুন।', 'success');
-                          }
-                        };
-                        reader.readAsDataURL(file);
-                      }}
-                    />
-                  </label>
+              {/* Global Optimized Logo Uploader */}
+              <div className="pt-3 border-t border-orange-100 space-y-3">
+                <OptimizedImageUploader
+                  label="কোম্পানি লোগো ফাইল আপলোড (সর্বোচ্চ ২০ MB — স্বচ্ছতা অক্ষুণ্ণ)"
+                  category="COMPANY_LOGO"
+                  storageFolder="company-assets"
+                  customFileName="company_logo"
+                  currentImageUrl={settingsForm.companyLogo}
+                  disabled={!isSuperAdmin}
+                  aspectRatioHint="স্বচ্ছ ব্যাকগ্রাউন্ড PNG / WebP সুপারিশকৃত"
+                  onUploadSuccess={(res) => {
+                    setSettingsForm((prev) => ({
+                      ...prev,
+                      companyLogo: res.downloadUrl,
+                    }));
+                    handleSaveLogo(res.downloadUrl);
+                  }}
+                  onImageRemove={() => {
+                    setSettingsForm((prev) => ({ ...prev, companyLogo: '' }));
+                    showToast('কাস্টম লোগো মুছে ডিফল্ট ভেক্টর লোগো সক্রিয় করা হয়েছে।', 'success');
+                  }}
+                  onError={(err) => showToast(err, 'error')}
+                />
 
-                  {/* Remove Logo Button (Resets to Official Vector Mascot Logo) */}
-                  {settingsForm.companyLogo && (
-                    <button
-                      type="button"
-                      disabled={!isSuperAdmin}
-                      onClick={() => {
-                        setSettingsForm((prev) => ({ ...prev, companyLogo: '' }));
-                        showToast('কাস্টম লোগো মুছে ডিফল্ট ভেক্টর লোগো সক্রিয় করা হয়েছে। স্থায়ী করতে সংরক্ষণ করুন।', 'success');
-                      }}
-                      className="px-3.5 py-2 bg-white hover:bg-red-50 border border-red-200 text-red-600 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                      <span>Remove Logo (লোগো মুছে ফেলুন)</span>
-                    </button>
-                  )}
+                <div className="flex justify-end">
+                  {/* Direct Save Changes Button for Logo */}
+                  <button
+                    type="button"
+                    disabled={!isSuperAdmin || savingLogo}
+                    onClick={() => handleSaveLogo()}
+                    className="px-4 py-2 bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50"
+                  >
+                    {savingLogo ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>লোগো সেভ হচ্ছে...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Save Changes (লোগো পরিবর্তন সংরক্ষণ)</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-
-                {/* Direct Save Changes Button for Logo */}
-                <button
-                  type="button"
-                  disabled={!isSuperAdmin || savingLogo}
-                  onClick={() => handleSaveLogo()}
-                  className="px-4 py-2 bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50"
-                >
-                  {savingLogo ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>লোগো সেভ হচ্ছে...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Save Changes (লোগো পরিবর্তন সংরক্ষণ)</span>
-                    </>
-                  )}
-                </button>
               </div>
             </div>
 
@@ -1448,72 +1424,12 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                 </div>
 
                 {/* Signature Upload */}
-                <div className="sm:col-span-3">
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    স্বাক্ষরের ছবি আপলোড (PNG/JPG স্বচ্ছ ব্যাকগ্রাউন্ড সুপারিশকৃত)
-                  </label>
-                  <div className="flex items-center gap-4">
-                    {settingsForm.authorizedSignatureUrl ? (
-                      <div className="relative border border-slate-300 bg-white rounded-lg p-2 h-14 w-44 flex items-center justify-center">
-                        <img
-                          src={settingsForm.authorizedSignatureUrl}
-                          alt="Signature Preview"
-                          className="max-h-full max-w-full object-contain"
-                        />
-                        {isSuperAdmin && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSettingsForm({
-                                ...settingsForm,
-                                authorizedSignatureUrl: '',
-                              })
-                            }
-                            title="স্বাক্ষর মুছে ফেলুন"
-                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 text-white flex items-center justify-center text-[10px]"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="h-14 w-44 border border-dashed border-slate-300 rounded-lg flex items-center justify-center text-slate-400 text-[11px] bg-white">
-                        কোনো স্বাক্ষর নেই
-                      </div>
-                    )}
-
-                    <label className={`cursor-pointer ${!isSuperAdmin ? 'opacity-50 pointer-events-none' : ''}`}>
-                      <span className="px-3 py-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-medium flex items-center gap-1.5 text-xs transition-colors">
-                        <Upload className="w-3.5 h-3.5 text-[#ea580c]" />
-                        <span>স্বাক্ষর ফাইল নির্বাচন করুন</span>
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        disabled={!isSuperAdmin}
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          if (file.size > 1.5 * 1024 * 1024) {
-                            showToast('স্বাক্ষরের সাইজ ১.৫ মেগাবাইট এর মধ্যে রাখুন।', 'error');
-                            return;
-                          }
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            if (typeof reader.result === 'string') {
-                              setSettingsForm((prev) => ({
-                                ...prev,
-                                authorizedSignatureUrl: reader.result as string,
-                              }));
-                            }
-                          };
-                          reader.readAsDataURL(file);
-                        }}
-                      />
+                <div className="sm:col-span-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-semibold text-slate-700">
+                      অনুমোদিত স্বাক্ষর (Authorized Signature — সর্বোচ্চ ২০ MB)
                     </label>
-
-                    <label className="flex items-center gap-2 cursor-pointer ml-auto">
+                    <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
                         disabled={!isSuperAdmin}
@@ -1530,6 +1446,64 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                         কার্ডে স্বাক্ষর প্রদর্শন করুন
                       </span>
                     </label>
+                  </div>
+
+                  <OptimizedImageUploader
+                    category="SIGNATURE"
+                    storageFolder="signatures"
+                    customFileName="authorized_signature"
+                    currentImageUrl={settingsForm.authorizedSignatureUrl}
+                    disabled={!isSuperAdmin}
+                    compact
+                    aspectRatioHint="স্বচ্ছ ব্যাকগ্রাউন্ড (Transparent PNG/WebP)"
+                    onUploadSuccess={(res) => {
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        authorizedSignatureUrl: res.downloadUrl,
+                      }));
+                      showToast(
+                        `স্বাক্ষর সফলভাবে অপটিমাইজ ও ক্লাউড স্টোরেজে আপলোড হয়েছে (${res.savingsPercent}% সাইজ কমেছে)!`,
+                        'success'
+                      );
+                    }}
+                    onImageRemove={() => {
+                      setSettingsForm((prev) => ({
+                        ...prev,
+                        authorizedSignatureUrl: '',
+                      }));
+                      showToast('স্বাক্ষর সরানো হয়েছে।', 'success');
+                    }}
+                    onError={(err) => showToast(err, 'error')}
+                  />
+
+                  {/* Live Signature & Authority Preview */}
+                  <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <span className="text-xs font-semibold text-slate-600">
+                      কার্ডে যেভাবে প্রদর্শিত হবে:
+                    </span>
+                    <div className="w-[140px] text-center p-2 bg-slate-50/80 rounded border border-slate-200 shadow-2xs">
+                      <div className="min-h-[24px] flex items-center justify-center">
+                        {settingsForm.authorizedSignatureUrl ? (
+                          <img
+                            src={settingsForm.authorizedSignatureUrl}
+                            alt="Signature Preview"
+                            referrerPolicy="no-referrer"
+                            className="max-h-7 max-w-[110px] object-contain mx-auto"
+                          />
+                        ) : (
+                          <div className="font-serif italic font-bold text-xs text-slate-800">
+                            {settingsForm.authorizedPersonName || 'মোঃ মাহমুদুল হাসান'}
+                          </div>
+                        )}
+                      </div>
+                      <div className="w-full border-t border-slate-300 my-1" />
+                      <div className="text-[10px] font-black text-[#111827] leading-tight truncate">
+                        {settingsForm.authorizedPersonName || 'মোঃ মাহমুদুল হাসান'}
+                      </div>
+                      <div className="text-[9px] font-semibold text-slate-600 leading-tight truncate">
+                        {settingsForm.authorizedPersonDesignation || 'Managing Director / Chairman'}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1684,7 +1658,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                 <button
                   type="button"
                   onClick={() => openOfflineQrModal(previewEmployee)}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-[#38251D] hover:text-[#D6B477] text-slate-700 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-slate-200"
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-[#244B38] hover:text-[#C9B77B] text-slate-700 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors border border-slate-200"
                 >
                   <QrCode className="w-4 h-4" />
                   <span>অফলাইন কিউআর ডেটা দেখুন</span>
@@ -1692,9 +1666,9 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
 
                 <button
                   onClick={() => openPrintStudio([previewEmployee], previewSide)}
-                  className="px-5 py-2 bg-gradient-to-r from-[#38251D] via-[#493025] to-[#38251D] hover:from-[#2a1b15] hover:to-[#38251D] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all shadow-md border border-[#D6B477]/50"
+                  className="px-5 py-2 bg-gradient-to-r from-[#244B38] via-[#397653] to-[#244B38] hover:from-[#1b382a] hover:to-[#244B38] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all shadow-md border border-[#C9B77B]/50"
                 >
-                  <Printer className="w-4 h-4 text-[#D6B477]" />
+                  <Printer className="w-4 h-4 text-[#C9B77B]" />
                   <span>প্রিন্ট ও পিডিএফ স্টুডিও</span>
                 </button>
               </div>
@@ -1708,11 +1682,11 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
       {/* ===================================================================== */}
       {inspectQrEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs no-print">
-          <div className="relative bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto border border-[#D6B477]/40">
+          <div className="relative bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto border border-[#C9B77B]/40">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-5">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#38251D] to-[#493025] flex items-center justify-center text-[#D6B477] shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#244B38] to-[#397653] flex items-center justify-center text-[#C9B77B] shadow-sm">
                   <QrCode className="w-5 h-5" />
                 </div>
                 <div>
@@ -1740,14 +1714,14 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
             {/* Content Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
               {/* Left: The QR Code itself */}
-              <div className="flex flex-col items-center bg-[#F3E8D6]/40 p-5 rounded-2xl border border-[#D6B477]/50">
-                <div className="text-xs font-bold text-[#38251D] mb-3 flex items-center gap-1.5">
+              <div className="flex flex-col items-center bg-[#EAF5E9]/50 p-5 rounded-2xl border border-[#C9B77B]/50">
+                <div className="text-xs font-bold text-[#244B38] mb-3 flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
                   <span>প্রিন্ট ও কার্ডে থাকা অফলাইন কিউআর</span>
                 </div>
 
-                {/* QR Code Container: Pure White with Dark Coffee Pattern */}
-                <div className="p-3 bg-white rounded-xl shadow-md border-2 border-[#D6B477] flex items-center justify-center">
+                {/* QR Code Container: Pure White with Deep Green Pattern */}
+                <div className="p-3 bg-white rounded-xl shadow-md border-2 border-[#C9B77B] flex items-center justify-center">
                   {inspectQrDataUrl ? (
                     <img
                       src={inspectQrDataUrl}
@@ -1762,14 +1736,14 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                 </div>
 
                 <div className="mt-3 text-center space-y-1">
-                  <div className="text-xs font-bold text-[#38251D]">
+                  <div className="text-xs font-bold text-[#244B38]">
                     {inspectQrEmployee.fullName}
                   </div>
-                  <div className="text-[11px] text-[#624331] font-mono">
+                  <div className="text-[11px] text-[#397653] font-mono">
                     ID: {inspectQrEmployee.employeeCode} · {inspectQrEmployee.designationName || 'কর্মচারী'}
                   </div>
                   <div className="text-[10px] text-slate-500 pt-1">
-                    Pure White Background (#FFFFFF) · Dark Coffee Pattern (#38251D)
+                    Pure White Background (#FFFFFF) · Deep Green Pattern (#244B38)
                   </div>
                 </div>
               </div>
@@ -1779,7 +1753,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-[#38251D]" />
+                      <FileText className="w-3.5 h-3.5 text-[#244B38]" />
                       <span>কিউআর কোডে এনকোডকৃত JSON ডেটা:</span>
                     </span>
                     <button
@@ -1791,7 +1765,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                         setTimeout(() => setCopiedJson(false), 2000);
                         showToast('অফলাইন JSON ডেটা ক্লিপবোর্ডে কপি করা হয়েছে', 'success');
                       }}
-                      className="text-xs font-bold text-[#38251D] hover:text-[#B98250] flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 transition-colors"
+                      className="text-xs font-bold text-[#244B38] hover:text-[#397653] flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 transition-colors"
                     >
                       {copiedJson ? (
                         <>
@@ -1834,7 +1808,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
             <div className="mt-5 pt-4 border-t border-slate-200">
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
-                  <Smartphone className="w-5 h-5 text-[#38251D]" />
+                  <Smartphone className="w-5 h-5 text-[#244B38]" />
                   <div>
                     <div className="text-xs font-bold text-slate-800">
                       অফলাইন স্ক্যান টেস্ট সিমুলেশন
@@ -1847,7 +1821,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                 <button
                   type="button"
                   onClick={() => setSimulatorActive(!simulatorActive)}
-                  className="px-3 py-1.5 bg-[#38251D] hover:bg-[#2a1b15] text-[#D6B477] text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1.5 bg-[#244B38] hover:bg-[#1a382a] text-[#C9B77B] text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>{simulatorActive ? 'সিমুলেশন বন্ধ করুন' : 'স্ক্যানার ফলাফল দেখুন'}</span>
@@ -1948,7 +1922,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-4 mb-5 gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#38251D] text-[#D6B477] border border-[#D6B477]/40 flex items-center justify-center font-bold shadow-xs">
+                <div className="w-10 h-10 rounded-xl bg-[#244B38] text-[#C9B77B] border border-[#C9B77B]/40 flex items-center justify-center font-bold shadow-xs">
                   <Printer className="w-5 h-5" />
                 </div>
                 <div>
@@ -1956,7 +1930,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                     <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
                       আইডি কার্ড প্রিন্ট ও পিডিএফ স্টুডিও
                     </h2>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F3E8D6] text-[#38251D] border border-[#D6B477]/60">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EAF5E9] text-[#244B38] border border-[#C9B77B]/60">
                       Standard CR80 (54 × 85.6 mm)
                     </span>
                   </div>
@@ -1991,7 +1965,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                     onClick={() => setPrintSide('both')}
                     className={`py-2 px-2.5 rounded-lg border text-center transition-all ${
                       printSide === 'both'
-                        ? 'bg-[#38251D] text-white border-[#D6B477] shadow-xs'
+                        ? 'bg-[#244B38] text-white border-[#C9B77B] shadow-xs'
                         : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                     }`}
                   >
@@ -2002,7 +1976,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                     onClick={() => setPrintSide('front')}
                     className={`py-2 px-2.5 rounded-lg border text-center transition-all ${
                       printSide === 'front'
-                        ? 'bg-[#38251D] text-white border-[#D6B477] shadow-xs'
+                        ? 'bg-[#244B38] text-white border-[#C9B77B] shadow-xs'
                         : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                     }`}
                   >
@@ -2013,7 +1987,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                     onClick={() => setPrintSide('back')}
                     className={`py-2 px-2.5 rounded-lg border text-center transition-all ${
                       printSide === 'back'
-                        ? 'bg-[#38251D] text-white border-[#D6B477] shadow-xs'
+                        ? 'bg-[#244B38] text-white border-[#C9B77B] shadow-xs'
                         : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                     }`}
                   >
@@ -2034,12 +2008,12 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                     onClick={() => setPrintLayoutFormat('cr80')}
                     className={`py-2 px-2.5 rounded-lg border text-left transition-all ${
                       printLayoutFormat === 'cr80'
-                        ? 'bg-[#38251D] text-white border-[#D6B477] shadow-xs'
+                        ? 'bg-[#244B38] text-white border-[#C9B77B] shadow-xs'
                         : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                     }`}
                   >
                     <div className="font-bold flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#D6B477]" />
+                      <span className="w-2 h-2 rounded-full bg-[#C9B77B]" />
                       <span>CR80 PVC Direct</span>
                     </div>
                     <div className="text-[10px] opacity-80 mt-0.5">৫৪ × ৮৫.৬ মিমি (পিভিসি প্রিন্টার)</div>
@@ -2049,7 +2023,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                     onClick={() => setPrintLayoutFormat('a4')}
                     className={`py-2 px-2.5 rounded-lg border text-left transition-all ${
                       printLayoutFormat === 'a4'
-                        ? 'bg-[#38251D] text-white border-[#D6B477] shadow-xs'
+                        ? 'bg-[#244B38] text-white border-[#C9B77B] shadow-xs'
                         : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                     }`}
                   >
@@ -2064,34 +2038,34 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
             </div>
 
             {/* Collapsible Duplex Printing & Quality Guidelines */}
-            <div className="mb-5 bg-[#F3E8D6]/50 border border-[#D6B477]/50 rounded-xl overflow-hidden text-xs">
+            <div className="mb-5 bg-[#EAF5E9]/50 border border-[#C9B77B]/50 rounded-xl overflow-hidden text-xs">
               <button
                 type="button"
                 onClick={() => setShowDuplexHelp((prev) => !prev)}
-                className="w-full px-4 py-2.5 flex items-center justify-between text-left font-bold text-[#38251D] hover:bg-[#F3E8D6]/80 transition-colors"
+                className="w-full px-4 py-2.5 flex items-center justify-between text-left font-bold text-[#244B38] hover:bg-[#EAF5E9]/80 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-[#8B6348]" />
+                  <ShieldCheck className="w-4 h-4 text-[#397653]" />
                   <span>ডুপ্লেক্স (উভয় পাশ) প্রিন্টিং ও ১০০% নিখুঁত আউটপুট নির্দেশিকা</span>
                 </div>
-                <span className="text-[11px] font-semibold text-[#8B6348]">
+                <span className="text-[11px] font-semibold text-[#397653]">
                   {showDuplexHelp ? 'লুকান ▲' : 'বিস্তারিত দেখুন ▼'}
                 </span>
               </button>
 
               {showDuplexHelp && (
-                <div className="px-4 pb-3.5 pt-1 space-y-2 text-[#493025] text-[11px] leading-relaxed border-t border-[#D6B477]/30">
+                <div className="px-4 pb-3.5 pt-1 space-y-2 text-[#244B38] text-[11px] leading-relaxed border-t border-[#C9B77B]/30">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="p-2.5 bg-white/70 rounded-lg border border-[#D6B477]/30">
-                      <span className="font-bold text-[#38251D] block mb-1">
+                    <div className="p-2.5 bg-white/70 rounded-lg border border-[#C9B77B]/30">
+                      <span className="font-bold text-[#244B38] block mb-1">
                         • পিভিসি কার্ড প্রিন্টারে (Zebra, Evolis, Magicard, Fargo):
                       </span>
                       <span>
                         প্রিন্টার সেটিংসে Paper Size &quot;Custom 54x85.6mm&quot; এবং ডুপ্লেক্স অটো-ফ্লিপ চালু থাকলে পেজ ১ (Front) এবং পেজ ২ (Back) ক্রমানুসারে উভয় পাশে নিজে থেকেই প্রিন্ট হবে।
                       </span>
                     </div>
-                    <div className="p-2.5 bg-white/70 rounded-lg border border-[#D6B477]/30">
-                      <span className="font-bold text-[#38251D] block mb-1">
+                    <div className="p-2.5 bg-white/70 rounded-lg border border-[#C9B77B]/30">
+                      <span className="font-bold text-[#244B38] block mb-1">
                         • সাধারণ ডেস্কটপ প্রিন্টারে দুই পাশে প্রিন্ট করতে:
                       </span>
                       <span>
@@ -2133,8 +2107,8 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
             <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs text-slate-600">
                 {generatingPdf ? (
-                  <div className="flex items-center gap-2 text-[#38251D] font-bold">
-                    <RefreshCw className="w-4 h-4 animate-spin text-[#8B6348]" />
+                  <div className="flex items-center gap-2 text-[#244B38] font-bold">
+                    <RefreshCw className="w-4 h-4 animate-spin text-[#397653]" />
                     <span>
                       পিডিএফ তৈরি হচ্ছে... {pdfProgress?.current || 1}/{pdfProgress?.total || printEmployees.length}
                     </span>
@@ -2159,9 +2133,9 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                 <button
                   disabled={generatingPdf}
                   onClick={() => handleExecutePdfDownload('cr80')}
-                  className="px-4 py-2.5 bg-gradient-to-r from-[#38251D] via-[#493025] to-[#38251D] hover:from-[#2a1b15] hover:to-[#38251D] text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-md border border-[#D6B477]/50 disabled:opacity-50"
+                  className="px-4 py-2.5 bg-gradient-to-r from-[#244B38] via-[#397653] to-[#244B38] hover:from-[#1b382a] hover:to-[#244B38] text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-md border border-[#C9B77B]/50 disabled:opacity-50"
                 >
-                  <Download className="w-4 h-4 text-[#D6B477]" />
+                  <Download className="w-4 h-4 text-[#C9B77B]" />
                   <span>CR80 PDF (৫৪ × ৮৫.৬ মিমি)</span>
                 </button>
 
@@ -2169,7 +2143,7 @@ export const IdCardViews: React.FC<IdCardViewsProps> = ({
                 <button
                   disabled={generatingPdf}
                   onClick={() => handleExecutePdfDownload('a4')}
-                  className="px-4 py-2.5 bg-gradient-to-r from-[#8B6348] to-[#624331] hover:from-[#75523a] hover:to-[#493025] text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-md border border-[#D6B477]/40 disabled:opacity-50"
+                  className="px-4 py-2.5 bg-gradient-to-r from-[#397653] to-[#244B38] hover:from-[#2e5e42] hover:to-[#1b382a] text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-md border border-[#C9B77B]/40 disabled:opacity-50"
                 >
                   <Download className="w-4 h-4 text-[#F3E8D6]" />
                   <span>A4 Sheet PDF (৬টি কার্ড/পেজ)</span>

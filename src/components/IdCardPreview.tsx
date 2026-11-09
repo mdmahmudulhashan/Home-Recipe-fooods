@@ -62,7 +62,7 @@ export const IdCardPreview: React.FC<IdCardPreviewProps> = ({
   // Generate 100% Offline Structured JSON QR Code
   // Encodes employee identity data directly into the QR pattern.
   // NO URLs, NO external websites, NO internet or server requests required on scan.
-  // Using Dark Coffee Brown (#38251D) pattern on Pure White (#FFFFFF) background with ample quiet zone.
+  // Using Deep Charcoal pattern on Pure White background with ample quiet zone.
   useEffect(() => {
     let active = true;
 
@@ -97,26 +97,9 @@ export const IdCardPreview: React.FC<IdCardPreviewProps> = ({
     currentSettings.companyName,
   ]);
 
-  // Name splitting: First word/MD in Coffee Bronze #8B6348, remainder in Rich Dark Coffee #38251D
-  const { namePrefix, nameRemainder } = useMemo(() => {
-    const clean = (employee.fullName || 'কর্মচারী').trim();
-    if (clean.toUpperCase().startsWith('MD ') || clean.toUpperCase().startsWith('MD. ')) {
-      return {
-        namePrefix: clean.slice(0, 3).toUpperCase(),
-        nameRemainder: clean.slice(3).trim().toUpperCase(),
-      };
-    }
-    const parts = clean.split(' ');
-    if (parts.length > 1) {
-      return {
-        namePrefix: parts[0].toUpperCase(),
-        nameRemainder: parts.slice(1).join(' ').toUpperCase(),
-      };
-    }
-    return {
-      namePrefix: clean.toUpperCase(),
-      nameRemainder: '',
-    };
+  // Name formatting
+  const formattedName = useMemo(() => {
+    return (employee.fullName || 'Employee Name').trim();
   }, [employee.fullName]);
 
   // Standard CR80 Card Dimensions: 54mm x 85.6mm (Ratio ~ 0.63:1)
@@ -139,17 +122,19 @@ export const IdCardPreview: React.FC<IdCardPreviewProps> = ({
     outline: 'none',
   };
 
-  const cardContainerClass = `relative overflow-hidden bg-[#FFF9EF] select-none text-[#38251D] ${
+  const cardContainerClass = `relative overflow-hidden bg-gradient-to-b from-[#FFFFFF] via-[#FAFBFA] to-[#F2F4F3] select-none text-[#222222] ${
     printModeMm ? 'rounded-[3.18mm]' : 'rounded-[14px]'
   } flex flex-col justify-between font-sans ${
     !forPrintOrPdf && showShadow
-      ? 'shadow-2xl ring-1 ring-[#38251D]/25'
+      ? 'shadow-2xl ring-1 ring-black/10'
       : 'shadow-none ring-0 border-0 outline-none'
   }`;
 
   // =========================================================================
-  // FRONT SIDE — Premium Luxury Dark Coffee Edition
-  // (#38251D, #493025, #624331, #8B6348, #D6B477, #F3E8D6, #FFF9EF)
+  // FRONT SIDE — Modern & Professional Business Vector Style
+  // Top: Dark Charcoal Grey Header (#464646) with Vibrant Orange Polygon (#F3841D) & Wave Crest
+  // Mid: Pure White (#FFFFFF) with Centered Circular Photo, Name, Designation & Aligned Details
+  // Bottom: Dark Charcoal Wave (#464646) with Vibrant Orange Accent Ribbon (#F3841D)
   // =========================================================================
   const renderFrontSide = () => (
     <div
@@ -157,201 +142,200 @@ export const IdCardPreview: React.FC<IdCardPreviewProps> = ({
       style={cardStyle}
       className={cardContainerClass}
     >
-      {/* Background Artwork: Multi-tone Dark Coffee Gradient, Layered Shapes, Gold Hairlines & Embossed Motifs */}
+      {/* Luxury PVC Card Corner Sheen */}
+      <div className="absolute top-0 right-0 w-36 h-36 bg-gradient-to-bl from-white/12 via-white/5 to-transparent pointer-events-none z-30" />
+
+      {/* Background SVG Artwork: Header Charcoal + Orange Triangle, Wave Divider & Bottom Wave */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
         <svg viewBox="0 0 320 508" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
           <defs>
-            {/* Header Multi-tone Dark Coffee Gradient */}
-            <linearGradient id="frontDarkCoffeeGrad" x1="0" y1="0" x2="320" y2="145" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="#38251D" />
-              <stop offset="40%" stopColor="#493025" />
-              <stop offset="75%" stopColor="#624331" />
-              <stop offset="100%" stopColor="#38251D" />
+            <linearGradient id="charcoalGrad" x1="0" y1="0" x2="320" y2="200" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#4A4A4A" />
+              <stop offset="100%" stopColor="#3C3C3C" />
             </linearGradient>
 
-            {/* Bronze to Gold Metallic Accent Gradient */}
-            <linearGradient id="frontBronzeGoldGrad" x1="0" y1="0" x2="320" y2="0" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="#8B6348" />
-              <stop offset="35%" stopColor="#D6B477" />
-              <stop offset="70%" stopColor="#A07354" />
-              <stop offset="100%" stopColor="#8B6348" />
+            <linearGradient id="orangeAccentGrad" x1="85" y1="0" x2="320" y2="180" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#FB923C" />
+              <stop offset="60%" stopColor="#F3841D" />
+              <stop offset="100%" stopColor="#EA7611" />
             </linearGradient>
 
-            {/* Bottom Coffee Ribbon Gradient */}
-            <linearGradient id="frontBottomCoffeeGrad" x1="0" y1="470" x2="320" y2="508" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="#38251D" />
-              <stop offset="50%" stopColor="#493025" />
-              <stop offset="100%" stopColor="#38251D" />
+            <linearGradient id="bottomCharcoalGrad" x1="0" y1="460" x2="320" y2="508" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#464646" />
+              <stop offset="100%" stopColor="#383838" />
             </linearGradient>
 
-            {/* Subtle Embossed Geometric Grid Motif */}
-            <pattern id="luxeEmbossedGrid" x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse">
-              <circle cx="11" cy="11" r="0.75" fill="#8B6348" fillOpacity="0.14" />
-              <path d="M0 11 L22 11 M11 0 L11 22" stroke="#8B6348" strokeWidth="0.5" strokeOpacity="0.08" />
-              <path d="M0 0 L22 22 M22 0 L0 22" stroke="#D6B477" strokeWidth="0.35" strokeOpacity="0.07" strokeDasharray="1 3" />
+            {/* Premium Satin Pearl Tone for White Body */}
+            <linearGradient id="frontBodyToneGrad" x1="160" y1="120" x2="160" y2="470" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.96" />
+              <stop offset="40%" stopColor="#FAFBFB" stopOpacity="0.94" />
+              <stop offset="80%" stopColor="#F5F7F6" stopOpacity="0.95" />
+              <stop offset="100%" stopColor="#EFF2F0" stopOpacity="0.97" />
+            </linearGradient>
+
+            {/* Premium Micro-Guilloche Dual-Tone Security Mesh for White Body */}
+            <pattern id="frontPremiumMesh" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+              <path d="M0 10 Q5 0 10 10 T20 10" fill="none" stroke="#F3841D" strokeWidth="0.35" strokeOpacity="0.05" />
+              <path d="M10 0 Q15 10 20 0 T30 0" fill="none" stroke="#464646" strokeWidth="0.25" strokeOpacity="0.035" />
+              <circle cx="10" cy="10" r="1.2" fill="#F3841D" fillOpacity="0.04" />
             </pattern>
+            <radialGradient id="frontSecurityGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#F3841D" stopOpacity="0.045" />
+              <stop offset="60%" stopColor="#F3841D" stopOpacity="0.015" />
+              <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+            </radialGradient>
           </defs>
 
-          {/* Full Card Subtle Embossed Background Texture */}
-          <rect x="0" y="0" width="320" height="508" fill="url(#luxeEmbossedGrid)" />
+          {/* Base Satin Tone & Security Mesh rendered FIRST (behind wave paths) */}
+          <rect x="0" y="0" width="320" height="508" fill="url(#frontBodyToneGrad)" />
+          <rect x="0" y="0" width="320" height="508" fill="url(#frontPremiumMesh)" />
+          <circle cx="160" cy="320" r="115" fill="url(#frontSecurityGlow)" />
+          <circle cx="160" cy="320" r="75" fill="none" stroke="#F3841D" strokeWidth="0.4" strokeDasharray="3 3" strokeOpacity="0.07" />
+          <circle cx="160" cy="320" r="50" fill="none" stroke="#464646" strokeWidth="0.3" strokeOpacity="0.05" />
 
-          {/* Top Header Background Wave Shape in Rich Dark Coffee */}
-          <path d="M0 0 L320 0 L320 122 C240 144, 120 114, 0 136 Z" fill="url(#frontDarkCoffeeGrad)" />
+          {/* 1. Base Dark Charcoal Header Shape — Dynamic undulating wave */}
+          <path
+            d="M0 0 L320 0 L320 185 C240 225, 175 195, 120 170 C65 145, 25 160, 0 185 Z"
+            fill="url(#charcoalGrad)"
+          />
 
-          {/* Layer 1: Dark Mocha (#624331) Intermediate Band */}
-          <path d="M0 131 C120 111, 240 141, 320 119 L320 127 C240 147, 120 119, 0 137 Z" fill="#624331" fillOpacity="0.95" />
+          {/* 2. Top-Right Orange Diagonal Wave Shape — Vibrant orange wave swoop */}
+          <path
+            d="M90 0 L320 0 L320 185 C250 220, 190 190, 145 148 L90 0 Z"
+            fill="url(#orangeAccentGrad)"
+          />
 
-          {/* Layer 2: Coffee Bronze (#8B6348) Wave Band */}
-          <path d="M0 135 C120 115, 240 143, 320 123 L320 133 C240 151, 120 125, 0 143 Z" fill="#8B6348" fillOpacity="0.9" />
+          {/* 3. Orange Dividing Wave Ribbon beneath Header */}
+          <path
+            d="M0 185 C25 160, 65 145, 120 170 C175 195, 240 225, 320 185"
+            stroke="#F3841D"
+            strokeWidth="4.5"
+            strokeLinecap="round"
+          />
 
-          {/* Layer 3: Warm Cream (#F3E8D6) Wave Band */}
-          <path d="M0 138 C120 118, 240 145, 320 126 L320 138 C240 154, 120 128, 0 146 Z" fill="#F3E8D6" />
+          {/* 4. Bottom Dark Charcoal Wave Shape */}
+          <path
+            d="M0 465 C85 435, 200 495, 320 460 L320 508 L0 508 Z"
+            fill="url(#bottomCharcoalGrad)"
+          />
 
-          {/* Layer 4: Champagne Gold (#D6B477) Sharp Accent Wave Line */}
-          <path d="M0 140 C120 119, 240 146, 320 128" stroke="#D6B477" strokeWidth="2.4" strokeLinecap="round" />
-
-          {/* Mid-body Smooth Abstract Depth Curves in Warm Cream & Bronze */}
-          <path d="M-20 225 C60 195, 80 295, 160 265 C240 235, 280 315, 340 285 L340 345 C280 365, 230 305, 150 325 C70 345, 40 265, -20 285 Z" fill="#F3E8D6" fillOpacity="0.6" />
-          <path d="M-10 245 C90 205, 180 325, 330 265" stroke="#D6B477" strokeWidth="0.8" strokeDasharray="4 4" strokeOpacity="0.4" />
-
-          {/* Bottom Layered Coffee Shapes in Warm Cream, Coffee Bronze & Rich Dark Coffee */}
-          <path d="M0 482 C90 468, 210 496, 320 476 L320 508 L0 508 Z" fill="#F3E8D6" />
-          <path d="M0 490 C100 476, 220 500, 320 484 L320 508 L0 508 Z" fill="#8B6348" />
-          <path d="M0 495 C110 483, 230 503, 320 491 L320 508 L0 508 Z" fill="url(#frontBottomCoffeeGrad)" />
-          <path d="M0 495 C110 483, 230 503, 320 491" stroke="#D6B477" strokeWidth="2" />
+          {/* 5. Bottom Orange Accent Wave Ribbon */}
+          <path
+            d="M0 465 C85 435, 200 495, 320 460"
+            stroke="#F3841D"
+            strokeWidth="4.5"
+            strokeLinecap="round"
+          />
         </svg>
       </div>
 
-      {/* 1. Header: Rich Dark Coffee Header with Home Recipe Foods Logo */}
-      <div className="relative w-full pt-3 pb-9 px-4 flex flex-col items-center z-10">
-        {/* Decorative Golden Hairlines in Header Corners */}
-        <div className="absolute top-0 right-0 w-28 h-28 overflow-hidden pointer-events-none opacity-30">
-          <svg viewBox="0 0 100 100" fill="none" className="w-full h-full">
-            <line x1="0" y1="100" x2="100" y2="0" stroke="#D6B477" strokeWidth="1" />
-            <line x1="20" y1="100" x2="100" y2="20" stroke="#D6B477" strokeWidth="1.5" />
-            <line x1="40" y1="100" x2="100" y2="40" stroke="#F3E8D6" strokeWidth="0.8" />
-            <circle cx="85" cy="15" r="2.5" fill="#D6B477" />
-          </svg>
-        </div>
-        <div className="absolute top-0 left-0 w-24 h-24 overflow-hidden pointer-events-none opacity-20">
-          <svg viewBox="0 0 100 100" fill="none" className="w-full h-full">
-            <line x1="100" y1="100" x2="0" y2="0" stroke="#D6B477" strokeWidth="1" />
-            <line x1="80" y1="100" x2="0" y2="20" stroke="#F3E8D6" strokeWidth="1" />
-          </svg>
-        </div>
-
-        {/* Company Logo at Top Header (Original Ratio & Color Preserved) */}
-        <div className="z-20">
-          <HomeRecipeLogo
-            size="md"
-            customLogoUrl={currentSettings.companyLogo}
-            variant="light"
-          />
-        </div>
+      {/* Top Header: Company Logo Centered & Significantly Larger on Dark Charcoal */}
+      <div className="relative z-10 w-full pt-3 px-3 flex flex-col items-center justify-center text-center">
+        <HomeRecipeLogo
+          size="2xl"
+          customLogoUrl={currentSettings.companyLogo}
+          variant="light"
+          className="mx-auto"
+        />
       </div>
 
-      {/* 2. Large Circular Employee Photo Frame with Champagne Gold Double Border */}
-      <div className="relative -mt-10 z-20 flex justify-center">
-        {/* Outer Metallic Ring: Champagne Gold (#D6B477) + Coffee Bronze (#8B6348) */}
-        <div className="w-[104px] h-[104px] rounded-full p-[2.5px] bg-gradient-to-tr from-[#D6B477] via-[#8B6348] to-[#D6B477] shadow-[0_6px_20px_rgba(56,37,29,0.35)] flex items-center justify-center">
-          {/* Inner Ring: Crisp Ivory (#FFF9EF) */}
-          <div className="w-full h-full rounded-full p-[2px] bg-[#FFF9EF]">
-            {employee.photoUrl ? (
-              <img
-                src={employee.photoUrl}
-                alt={employee.fullName}
-                referrerPolicy="no-referrer"
-                className="w-full h-full rounded-full object-cover object-top block"
-              />
-            ) : (
-              <div className="w-full h-full rounded-full bg-[#F3E8D6] flex items-center justify-center text-[#38251D] font-black text-2xl">
-                {employee.fullName ? employee.fullName.charAt(0).toUpperCase() : 'HR'}
-              </div>
-            )}
+      {/* Circular Employee Photo: Enlarged (114px) and Moved Further DOWNWARD (mt-6) */}
+      <div className="relative z-20 flex justify-center mt-6">
+        <div className="p-[3.5px] rounded-full bg-gradient-to-tr from-[#EA7611] via-[#F3841D] to-[#FDBA74] shadow-[0_14px_32px_rgba(0,0,0,0.24)] flex items-center justify-center">
+          <div className="p-[3.5px] rounded-full bg-white flex items-center justify-center">
+            <div className="w-[114px] h-[114px] rounded-full overflow-hidden bg-slate-100 flex items-center justify-center ring-1 ring-black/5">
+              {employee.photoUrl ? (
+                <img
+                  src={employee.photoUrl}
+                  alt={employee.fullName}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full rounded-full object-cover object-top block"
+                />
+              ) : (
+                <div className="w-full h-full rounded-full bg-slate-200 flex items-center justify-center text-[#464646] font-black text-3xl">
+                  {employee.fullName ? employee.fullName.charAt(0).toUpperCase() : 'HR'}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 3. Employee Name & Designation — Premium Ivory Text Panel with Gold Accent Hairlines */}
-      <div className="relative z-20 mx-4 mt-1 px-3 py-2 bg-[#FFF9EF] rounded-xl border border-[#D6B477]/50 shadow-xs text-center">
-        {/* Employee Name */}
-        <h2 className="text-[17px] font-black tracking-tight leading-tight uppercase font-sans">
-          <span className="text-[#8B6348] mr-1.5">{namePrefix}</span>
-          <span className="text-[#38251D]">{nameRemainder}</span>
+      {/* Mid-Body: Name & Job Position — 100% Inside Pure White Section */}
+      <div className="relative z-10 text-center px-4 mt-2">
+        <h2 className="text-[17px] font-black tracking-tight text-[#0F172A] uppercase leading-tight font-sans">
+          {formattedName}
         </h2>
-
-        {/* Designation with Champagne Gold Accents & Diamond Ornament */}
-        <div className="flex items-center justify-center gap-1.5 mt-0.5">
-          <span className="w-4 h-[1px] bg-[#D6B477]" />
-          <span className="text-[9.5px] font-bold tracking-widest text-[#8B6348] uppercase">
-            {employee.designationName || 'Chief Technology Officer'}
-          </span>
-          <span className="w-4 h-[1px] bg-[#D6B477]" />
-        </div>
+        <p className="text-[10px] font-extrabold text-[#EA7611] uppercase tracking-[0.18em] mt-0.5">
+          {employee.designationName || 'Job Position'}
+        </p>
+        <div className="w-12 h-[2px] bg-gradient-to-r from-transparent via-[#F3841D] to-transparent mx-auto mt-1" />
       </div>
 
-      {/* 4. Information Section — Warm Cream & Ivory with Rich Dark Coffee Text */}
-      <div className="relative z-20 flex-1 px-4 pt-1.5 pb-2 flex flex-col justify-between">
-        {/* Employee ID Highlighted in Luxury Coffee Bronze & Champagne Gold Badge */}
-        <div className="bg-gradient-to-r from-[#8B6348] via-[#A07354] to-[#493025] text-white px-3 py-1.5 rounded-lg flex items-center justify-between border border-[#D6B477] shadow-xs">
-          <span className="text-[9.5px] font-bold uppercase tracking-wider text-[#F3E8D6]">
-            Employee ID No.
-          </span>
-          <span className="font-mono-num font-black text-[13px] tracking-widest text-[#FFF9EF]">
-            {employee.employeeCode || '20251'}
-          </span>
-        </div>
+      {/* Employee Details List (ID, Blood Group, Phone, Email, Address) — 100% Inside Pure White Section */}
+      <div className="relative z-10 px-5 mt-2 flex-1 flex flex-col justify-start">
+        <div className="space-y-1.5 text-[10px] font-medium text-[#1E293B] w-full bg-white/70 backdrop-blur-xs rounded-xl p-2.5 border border-slate-100 shadow-2xs">
+          {/* ID Row */}
+          <div className="grid grid-cols-[68px_10px_1fr] items-center">
+            <span className="font-bold text-slate-600 text-[10.5px]">ID</span>
+            <span className="font-bold text-[#F3841D]">:</span>
+            <div>
+              <span className="font-mono-num font-black text-[#0F172A] tracking-wider text-[11px] bg-slate-100 border border-slate-200/90 px-2 py-0.5 rounded shadow-2xs inline-block">
+                {employee.employeeCode || 'HRF-1001'}
+              </span>
+            </div>
+          </div>
 
-        {/* Employee Details Grid with High-Contrast Rich Dark Coffee Text */}
-        <div className="mt-1 text-[10.5px] font-medium space-y-1 text-[#38251D] w-full px-0.5">
-          {/* Blood Group */}
-          <div className="grid grid-cols-[72px_12px_1fr] items-baseline pb-1 border-b border-[#F3E8D6]">
-            <span className="font-bold text-[#38251D] text-left">Blood Group</span>
-            <span className="font-bold text-[#D6B477] text-center">:</span>
-            <div className="text-right">
-              <span className="inline-block px-2 py-0.5 rounded text-[10px] font-extrabold bg-[#FFF9EF] border border-[#8B6348] text-[#8B6348] shadow-2xs">
+          {/* Blood Group Row */}
+          <div className="grid grid-cols-[68px_10px_1fr] items-center">
+            <span className="font-bold text-slate-600 text-[10.5px]">Blood Group</span>
+            <span className="font-bold text-[#F3841D]">:</span>
+            <div>
+              <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-black bg-gradient-to-r from-orange-100 to-amber-100 text-[#C25E09] border border-[#F3841D]/50 shadow-2xs">
                 {employee.bloodGroup || 'A+'}
               </span>
             </div>
           </div>
 
-          {/* Phone */}
-          <div className="grid grid-cols-[72px_12px_1fr] items-baseline pb-1 border-b border-[#F3E8D6]">
-            <span className="font-bold text-[#38251D] text-left">Phone</span>
-            <span className="font-bold text-[#D6B477] text-center">:</span>
-            <span className="font-mono-num font-bold text-[#38251D] text-right text-[10.5px]">
-              {employee.mobile || '+880 1841-269089'}
+          {/* Phone Row */}
+          <div className="grid grid-cols-[68px_10px_1fr] items-center">
+            <span className="font-bold text-slate-600 text-[10.5px]">Phone</span>
+            <span className="font-bold text-[#F3841D]">:</span>
+            <span className="font-mono-num font-bold text-[#0F172A]">
+              {employee.mobile || '01850999178'}
             </span>
           </div>
 
-          {/* Email */}
-          <div className="grid grid-cols-[72px_12px_1fr] items-baseline pb-1 border-b border-[#F3E8D6]">
-            <span className="font-bold text-[#38251D] text-left">Email</span>
-            <span className="font-bold text-[#D6B477] text-center">:</span>
-            <span className="font-semibold text-[#493025] text-right text-[10px] break-all">
-              {employee.email || 'hridoy222@gmail.com'}
+          {/* Email Row */}
+          <div className="grid grid-cols-[68px_10px_1fr] items-center">
+            <span className="font-bold text-slate-600 text-[10.5px]">Email</span>
+            <span className="font-bold text-[#F3841D]">:</span>
+            <span className="font-medium text-slate-700 truncate text-[9.5px]">
+              {employee.email || 'homerecipefoods.official@gmail.com'}
             </span>
           </div>
 
-          {/* Address */}
-          <div className="grid grid-cols-[72px_12px_1fr] items-start pb-0.5">
-            <span className="font-bold text-[#38251D] text-left pt-0.5">Address</span>
-            <span className="font-bold text-[#D6B477] text-center pt-0.5">:</span>
-            <span className="text-[9px] leading-tight font-medium text-[#624331] text-right break-words line-clamp-2">
-              {employee.currentAddress || 'Mahammad Pur, Senbag, Noakhali'}
+          {/* Address Row */}
+          <div className="grid grid-cols-[68px_10px_1fr] items-start">
+            <span className="font-bold text-slate-600 text-[10.5px] pt-0.5">Address</span>
+            <span className="font-bold text-[#F3841D] pt-0.5">:</span>
+            <span className="text-[9px] leading-tight font-medium text-slate-700 line-clamp-2 break-words">
+              {employee.currentAddress || '15/149, Shah Garibullah H/S, Khulshi, Chittagong'}
             </span>
           </div>
         </div>
-
-        {/* Bottom Accent Space */}
-        <div className="h-2" />
       </div>
+
+      {/* Bottom Spacer for Wave Margin */}
+      <div className="relative z-10 h-7" />
     </div>
   );
 
   // =========================================================================
-  // BACK SIDE — Premium Luxury Dark Coffee Edition
-  // (#38251D, #493025, #624331, #8B6348, #D6B477, #F3E8D6, #FFF9EF)
+  // BACK SIDE — Modern & Professional Business Vector Style
+  // Top: Dark Charcoal Header (#464646) with Elegant Wave & Vibrant Orange Accent Crest
+  // Mid: Pure White (#FFFFFF) with "Terms & Conditions" Orange Dots, Joined/Expiry Dates, Contacts, QR & Signature
+  // Bottom: Dark Charcoal Wave (#464646) with Vibrant Orange Accent Ribbon (#F3841D)
   // =========================================================================
   const renderBackSide = () => (
     <div
@@ -359,200 +343,223 @@ export const IdCardPreview: React.FC<IdCardPreviewProps> = ({
       style={cardStyle}
       className={cardContainerClass}
     >
-      {/* Background Artwork: Multi-tone Dark Coffee Curves, Geometric Patterns & Gold Accent Lines */}
+      {/* Luxury PVC Card Corner Sheen */}
+      <div className="absolute top-0 right-0 w-36 h-36 bg-gradient-to-bl from-white/12 via-white/5 to-transparent pointer-events-none z-30" />
+
+      {/* Background SVG Artwork: Header Charcoal Wave with Orange Accent & Bottom Wave */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
         <svg viewBox="0 0 320 508" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
           <defs>
-            <linearGradient id="backHeaderDarkCoffee" x1="0" y1="0" x2="320" y2="40" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="#38251D" />
-              <stop offset="50%" stopColor="#493025" />
-              <stop offset="100%" stopColor="#38251D" />
+            <linearGradient id="backCharcoalGrad" x1="0" y1="0" x2="320" y2="90" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#4A4A4A" />
+              <stop offset="100%" stopColor="#3C3C3C" />
             </linearGradient>
-            <linearGradient id="backBottomDarkCoffee" x1="0" y1="320" x2="320" y2="508" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="#38251D" />
-              <stop offset="45%" stopColor="#493025" />
-              <stop offset="80%" stopColor="#624331" />
-              <stop offset="100%" stopColor="#38251D" />
+
+            <linearGradient id="backBottomCharcoalGrad" x1="0" y1="460" x2="320" y2="508" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#464646" />
+              <stop offset="100%" stopColor="#383838" />
             </linearGradient>
+
+            {/* Premium Satin Pearl Tone for Back White Body */}
+            <linearGradient id="backBodyToneGrad" x1="160" y1="90" x2="160" y2="470" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.96" />
+              <stop offset="40%" stopColor="#FAFBFB" stopOpacity="0.94" />
+              <stop offset="80%" stopColor="#F5F7F6" stopOpacity="0.95" />
+              <stop offset="100%" stopColor="#EFF2F0" stopOpacity="0.97" />
+            </linearGradient>
+
+            {/* Premium Micro-Guilloche Dual-Tone Security Mesh for Back White Body */}
+            <pattern id="backPremiumMesh" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+              <path d="M0 10 Q5 0 10 10 T20 10" fill="none" stroke="#F3841D" strokeWidth="0.35" strokeOpacity="0.05" />
+              <path d="M10 0 Q15 10 20 0 T30 0" fill="none" stroke="#464646" strokeWidth="0.25" strokeOpacity="0.035" />
+              <circle cx="10" cy="10" r="1.2" fill="#F3841D" fillOpacity="0.04" />
+            </pattern>
+            <radialGradient id="backSecurityGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#F3841D" stopOpacity="0.045" />
+              <stop offset="60%" stopColor="#F3841D" stopOpacity="0.015" />
+              <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+            </radialGradient>
           </defs>
 
-          {/* Full Card Embossed Geometric Pattern */}
-          <rect x="0" y="0" width="320" height="508" fill="url(#luxeEmbossedGrid)" opacity="0.8" />
+          {/* Base Satin Tone & Security Mesh rendered FIRST (behind wave paths) */}
+          <rect x="0" y="0" width="320" height="508" fill="url(#backBodyToneGrad)" />
+          <rect x="0" y="0" width="320" height="508" fill="url(#backPremiumMesh)" />
+          <circle cx="160" cy="280" r="110" fill="url(#backSecurityGlow)" />
+          <circle cx="160" cy="280" r="68" fill="none" stroke="#F3841D" strokeWidth="0.4" strokeDasharray="3 3" strokeOpacity="0.07" />
+          <circle cx="160" cy="280" r="45" fill="none" stroke="#464646" strokeWidth="0.3" strokeOpacity="0.05" />
 
-          {/* Mid-body Soft Cream Organic Wave for Depth */}
-          <path d="M-20 180 C80 150, 200 240, 340 190 L340 250 C220 290, 100 210, -20 240 Z" fill="#F3E8D6" fillOpacity="0.65" />
-          <path d="M-10 190 C90 160, 210 250, 330 200" stroke="#D6B477" strokeWidth="0.8" strokeDasharray="3 3" strokeOpacity="0.4" />
+          {/* 1. Top Charcoal Header Wave — Raised contour so all text sits 100% in pure white */}
+          <path
+            d="M0 0 L320 0 L320 74 C215 58, 115 96, 0 75 Z"
+            fill="url(#backCharcoalGrad)"
+          />
+
+          {/* 2. Top Orange Accent Wave Crest Line */}
+          <path
+            d="M0 75 C115 96, 215 58, 320 74"
+            stroke="#F3841D"
+            strokeWidth="4.5"
+            strokeLinecap="round"
+          />
+
+          {/* 3. Bottom Dark Charcoal Wave Shape */}
+          <path
+            d="M0 465 C85 435, 200 495, 320 460 L320 508 L0 508 Z"
+            fill="url(#backBottomCharcoalGrad)"
+          />
+
+          {/* 4. Bottom Orange Accent Wave Ribbon */}
+          <path
+            d="M0 465 C85 435, 200 495, 320 460"
+            stroke="#F3841D"
+            strokeWidth="4.5"
+            strokeLinecap="round"
+          />
         </svg>
       </div>
 
-      {/* 1. Top Section: Rich Dark Coffee Header */}
-      <div className="relative z-10 bg-gradient-to-r from-[#38251D] via-[#493025] to-[#38251D] px-4 py-2 border-b-2 border-[#D6B477] flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-[#D6B477]" />
-          <span className="text-[9.5px] font-black tracking-widest text-[#FFF9EF] uppercase">
-            Terms & Conditions
-          </span>
-        </div>
-        <div className="text-[8px] font-bold text-[#D6B477] uppercase tracking-wider">
-          Home Recipe Foods
-        </div>
-      </div>
-
-      {/* 2. Middle Section: Terms and Conditions in Ivory Panel with Dark Coffee Text */}
-      <div className="relative z-10 px-3.5 pt-1.5 pb-1 space-y-1 text-left flex-1">
-        {(currentSettings.termsAndConditions || []).slice(0, 5).map((term, index) => {
-          const parts = term.split('।');
-          const title = parts[0] ? `${parts[0]}।` : term;
-          const desc = parts.slice(1).join('।').trim();
-
-          return (
-            <div key={index} className="flex items-start gap-1.5">
-              {/* Rich Dark Coffee & Champagne Gold Number Marker */}
-              <div className="shrink-0 mt-0.5 w-3.5 h-3.5 rounded-full bg-[#38251D] border border-[#D6B477] text-[7.5px] font-bold text-[#FFF9EF] flex items-center justify-center shadow-2xs">
-                {index + 1}
-              </div>
-              <div className="text-[7.8px] leading-[10.5px] text-[#38251D] flex-1">
-                <span className="font-bold text-[#38251D] mr-1">{title}</span>
-                {desc && <span className="text-[#624331] font-normal">{desc}</span>}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Issue Date, Expire Date & Company Logo Row on Warm Cream Background */}
-        <div className="w-full mt-1.5 pt-1 border-t border-[#F3E8D6] flex items-center justify-between px-1">
-          {/* Issue & Expire Date */}
-          <div className="text-[8.5px] font-semibold text-[#38251D] space-y-0.5">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-[#38251D]">Issue Date</span>
-              <span className="font-mono-num font-bold text-[#8B6348]">
-                : {issueDateFormatted}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-[#38251D]">Expire Date</span>
-              <span className="font-mono-num font-bold text-[#8B6348]">
-                : {expireDateFormatted}
-              </span>
-            </div>
-          </div>
-
-          {/* Company Logo on Back Side (Preserving Original Ratio & Transparency) */}
-          <div className="scale-90 origin-right">
-            <HomeRecipeLogo
-              size="sm"
-              customLogoUrl={currentSettings.companyLogo}
-              variant="dark"
-            />
-          </div>
+      {/* Top Header: Centered Company Logo on Charcoal Background */}
+      <div className="relative z-10 w-full pt-2 px-4 h-[76px] flex flex-col items-center justify-center text-center">
+        <HomeRecipeLogo
+          size="md"
+          customLogoUrl={currentSettings.companyLogo}
+          variant="light"
+          className="mx-auto"
+        />
+        <div className="text-[7.2px] font-black text-slate-200 uppercase tracking-widest mt-0.5">
+          {currentSettings.companyName || 'Home Recipe Foods'}
         </div>
       </div>
 
-      {/* 3. Bottom Section: Rich Dark Coffee Multi-Tone Background (#38251D to #493025) - ZERO BLACK */}
-      <div className="relative z-10 bg-gradient-to-br from-[#38251D] via-[#493025] to-[#38251D] text-white px-3.5 pt-2 pb-2.5 border-t-2 border-[#D6B477]">
-        {/* Official Information Header Badge */}
-        <div className="mb-1.5 flex items-center justify-between">
-          <div className="inline-block border border-[#D6B477] rounded-full px-2.5 py-0.5 bg-[#38251D]/90">
-            <span className="text-[8px] font-extrabold tracking-widest text-[#D6B477] uppercase">
-              Official Information
-            </span>
+      {/* Middle Section: Terms & Conditions with Solid Orange Bullet Dots — 100% Inside Pure White */}
+      <div className="relative z-10 px-5 pt-6 pb-1 flex-1 flex flex-col justify-start space-y-2">
+        <h3 className="text-center font-black text-xs text-[#0F172A] tracking-wider uppercase mb-0.5">
+          Terms & Conditions
+        </h3>
+
+        {/* Bulleted Terms matching the vector image's orange circular dots */}
+        <div className="space-y-1.5 text-left">
+          {(currentSettings.termsAndConditions || []).slice(0, 4).map((term, index) => {
+            const parts = term.split('।');
+            const title = parts[0] ? `${parts[0]}।` : term;
+            const desc = parts.slice(1).join('।').trim();
+
+            return (
+              <div key={index} className="flex items-start gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#F3841D] shrink-0 mt-0.5 shadow-2xs" />
+                <div className="text-[7.8px] leading-[11px] text-slate-700 flex-1">
+                  <span className="font-bold text-[#111827] mr-1">{title}</span>
+                  {desc && <span className="text-slate-600 font-normal">{desc}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Joined Date & Expiry Date row matching the vector card layout */}
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[8.5px] font-semibold text-slate-700 px-1">
+          <div className="flex items-center gap-1">
+            <span className="font-bold text-slate-800">Joined Date</span>
+            <span className="font-bold text-[#F3841D]">:</span>
+            <span className="font-mono-num font-bold text-[#111827]">{issueDateFormatted}</span>
           </div>
-          <div className="text-[7.5px] text-[#F3E8D6] font-medium tracking-wider">
-            Cardholder Helpline
+          <div className="flex items-center gap-1">
+            <span className="font-bold text-slate-800">Expiry Date</span>
+            <span className="font-bold text-[#F3841D]">:</span>
+            <span className="font-mono-num font-bold text-[#111827]">{expireDateFormatted}</span>
           </div>
         </div>
 
-        {/* Two-Column Layout: Contacts on Left, QR Code & Signature on Right */}
-        <div className="grid grid-cols-[1fr_88px] gap-2 items-center">
-          {/* Company Contacts with Champagne Gold Icons */}
-          <div className="space-y-1 text-[8px] sm:text-[8.5px]">
-            {/* Email */}
+        {/* Contacts, Offline QR & Signature Section */}
+        <div className="pt-2 border-t border-slate-100 grid grid-cols-[1fr_96px] gap-2 items-center">
+          {/* Company Contacts with Orange Icons */}
+          <div className="space-y-1 text-[7.8px] text-slate-700">
             <div className="flex items-center gap-1.5">
-              <span className="text-[#D6B477] shrink-0">
+              <span className="text-[#F3841D] shrink-0">
                 <Mail className="w-3 h-3" />
               </span>
-              <span className="break-all text-[#FFF9EF] font-medium">
-                {currentSettings.companyEmail || 'homerecipefoods.official@gmail.com'}
-              </span>
+              <span className="truncate">{currentSettings.companyEmail || 'homerecipefoods.official@gmail.com'}</span>
             </div>
 
-            {/* Phone */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[#D6B477] shrink-0">
+              <span className="text-[#F3841D] shrink-0">
                 <Phone className="w-3 h-3" />
               </span>
-              <span className="font-mono-num font-semibold text-[#FFF9EF]">
-                {currentSettings.companyPhone || '01743-890178'}
-              </span>
+              <span className="font-mono-num font-semibold">{currentSettings.companyPhone || '01743-890178'}</span>
             </div>
 
-            {/* Facebook */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[#D6B477] shrink-0">
+              <span className="text-[#F3841D] shrink-0">
                 <Globe className="w-3 h-3" />
               </span>
-              <span className="font-bold text-[#FFF9EF] truncate">
-                {currentSettings.facebookPage || 'HOME RECIPE FOODS'}
-              </span>
+              <span className="truncate">{currentSettings.facebookPage || 'HOME RECIPE FOODS'}</span>
             </div>
 
-            {/* Address */}
             <div className="flex items-start gap-1.5">
-              <span className="text-[#D6B477] shrink-0 mt-0.5">
+              <span className="text-[#F3841D] shrink-0 mt-0.5">
                 <MapPin className="w-3 h-3" />
               </span>
-              <span className="text-[7.5px] leading-snug text-[#F3E8D6]">
-                {currentSettings.officeAddress ||
-                  '15/149, Shah Garibullah H/S, Khulshi, Chittagong, Bangladesh'}
+              <span className="text-[7.2px] leading-snug line-clamp-2">
+                {currentSettings.officeAddress || '15/149, Shah Garibullah H/S, Khulshi, Chittagong'}
               </span>
             </div>
           </div>
 
-          {/* Right Side: QR Code + Authorized Signature with Dedicated Clean Ivory Panels */}
+          {/* Right Column: Signature & QR Code */}
           <div className="flex flex-col items-center justify-center">
-            {/* Authorized Signature Block with Dedicated Clean Ivory Panel */}
+            {/* Signature Block: Always renders Authorized Person's Name & Designation */}
             {currentSettings.signatureVisibility && (
               <div className="mb-1 text-center w-full">
-                <div className="bg-[#FFF9EF] rounded-md px-1.5 py-0.5 border border-[#D6B477] shadow-2xs inline-block w-full">
+                <div className="min-h-[22px] flex items-center justify-center px-1">
                   {currentSettings.authorizedSignatureUrl ? (
                     <img
                       src={currentSettings.authorizedSignatureUrl}
                       alt="Authorized Signature"
                       referrerPolicy="no-referrer"
-                      className="h-4.5 mx-auto object-contain"
+                      className="max-h-6 max-w-[90px] object-contain block mx-auto"
                     />
                   ) : (
-                    <div className="font-serif italic text-[9.5px] text-[#38251D] tracking-wider leading-none">
-                      {currentSettings.authorizedPersonName || 'M. Hasan'}
+                    <div className="font-serif italic font-bold text-[9.5px] text-slate-800 leading-none">
+                      {currentSettings.authorizedPersonName || 'মোঃ মাহমুদুল হাসান'}
                     </div>
                   )}
                 </div>
-                <div className="text-[6px] text-[#F3E8D6] font-medium scale-90 mt-0.5">
-                  কর্তৃপক্ষের স্বাক্ষর
+
+                {/* Signature Underline */}
+                <div className="w-full border-t border-slate-300 mt-0.5 mb-0.5" />
+
+                {/* Authorized Person's Name */}
+                <div className="text-[7.5px] font-black text-[#111827] leading-tight truncate">
+                  {currentSettings.authorizedPersonName || 'মোঃ মাহমুদুল হাসান'}
+                </div>
+
+                {/* Authorized Person's Designation */}
+                <div className="text-[6.5px] font-semibold text-slate-600 leading-tight truncate">
+                  {currentSettings.authorizedPersonDesignation || 'Managing Director / Chairman'}
                 </div>
               </div>
             )}
 
-            {/* Dedicated Pure White Square Area for 100% Offline QR Code */}
-            <div className="p-1.5 bg-white rounded-lg shadow-xs border border-[#D6B477] flex flex-col items-center justify-center">
+            {/* Dedicated Pure White Square for 100% Offline QR Code */}
+            <div className="p-1 bg-white rounded-lg shadow-xs border-2 border-[#F3841D] flex items-center justify-center">
               {qrCodeDataUrl ? (
                 <img
                   src={qrCodeDataUrl}
                   alt="Employee Offline Identity QR Code"
-                  className="w-[58px] h-[58px] block object-contain"
+                  className="w-[54px] h-[54px] block object-contain"
                 />
               ) : (
-                <div className="w-[58px] h-[58px] bg-white flex items-center justify-center text-[7.5px] text-[#38251D] font-mono">
+                <div className="w-[54px] h-[54px] bg-white flex items-center justify-center text-[7px] text-[#222222] font-mono">
                   Offline QR
                 </div>
               )}
             </div>
-            <div className="text-[5.5px] text-[#D6B477] font-semibold tracking-wider mt-0.5 uppercase">
-              Offline QR Data
-            </div>
           </div>
         </div>
       </div>
+
+      {/* Bottom Spacer for Wave Margin */}
+      <div className="relative z-10 h-7" />
     </div>
   );
 

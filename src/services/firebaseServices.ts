@@ -133,6 +133,12 @@ function compressImageDataUrl(dataUrl: string, maxWidth = 320, quality = 0.75): 
   });
 }
 
+import {
+  uploadOptimizedImage,
+  optimizeImage,
+  UploadResult,
+} from './imageOptimizationService.ts';
+
 // ============================================================================
 // 2. FILE UPLOAD SERVICE (Firebase Storage — storied-tine-xz0s9)
 // ============================================================================
@@ -141,12 +147,12 @@ export const fileUploadService = {
     if (!dataUrl || !dataUrl.startsWith('data:image/')) {
       return dataUrl;
     }
-    const compactDataUrl = await compressImageDataUrl(dataUrl, 320, 0.75);
+    const cleanCode = String(employeeCode).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const compactDataUrl = await compressImageDataUrl(dataUrl, 800, 0.88);
     if (!auth.currentUser) {
       return compactDataUrl;
     }
-    const cleanCode = String(employeeCode).replace(/[^a-zA-Z0-9_-]/g, '_');
-    const storagePath = `employee-photos/${cleanCode}/profile.jpg`;
+    const storagePath = `employee-photos/${cleanCode}/profile.webp`;
     const photoRef = ref(storage, storagePath);
 
     try {
@@ -155,11 +161,52 @@ export const fileUploadService = {
           await uploadString(photoRef, compactDataUrl, 'data_url');
           return await getDownloadURL(photoRef);
         })(),
-        2500
+        5000
       );
     } catch {
       return compactDataUrl;
     }
+  },
+
+  async uploadEmployeePhotoFile(
+    employeeCode: string,
+    file: File,
+    onProgress?: (percent: number, statusText: string) => void
+  ): Promise<UploadResult> {
+    const cleanCode = String(employeeCode).replace(/[^a-zA-Z0-9_-]/g, '_');
+    return await uploadOptimizedImage({
+      file,
+      category: 'EMPLOYEE_PROFILE',
+      storageFolder: `employee-photos/${cleanCode}`,
+      customFileName: 'profile',
+      onProgress,
+    });
+  },
+
+  async uploadCompanyLogo(
+    file: File,
+    onProgress?: (percent: number, statusText: string) => void
+  ): Promise<UploadResult> {
+    return await uploadOptimizedImage({
+      file,
+      category: 'COMPANY_LOGO',
+      storageFolder: 'company-assets',
+      customFileName: 'company_logo',
+      onProgress,
+    });
+  },
+
+  async uploadAuthorizedSignature(
+    file: File,
+    onProgress?: (percent: number, statusText: string) => void
+  ): Promise<UploadResult> {
+    return await uploadOptimizedImage({
+      file,
+      category: 'SIGNATURE',
+      storageFolder: 'signatures',
+      customFileName: 'authorized_signature',
+      onProgress,
+    });
   },
 
   async uploadEmployeeDocument(
@@ -180,12 +227,17 @@ export const fileUploadService = {
     if (!auth.currentUser || !employeeCode) {
       return;
     }
+    const cleanCode = String(employeeCode).replace(/[^a-zA-Z0-9_-]/g, '_');
     try {
-      const cleanCode = String(employeeCode).replace(/[^a-zA-Z0-9_-]/g, '_');
-      const photoRef = ref(storage, `employee-photos/${cleanCode}/profile.jpg`);
+      const photoRef = ref(storage, `employee-photos/${cleanCode}/profile.webp`);
       await withTimeout(deleteObject(photoRef), 3000);
     } catch {
-      // Safe non-blocking cleanup if no Storage object exists for this employee
+      try {
+        const legacyRef = ref(storage, `employee-photos/${cleanCode}/profile.jpg`);
+        await withTimeout(deleteObject(legacyRef), 3000);
+      } catch {
+        // Safe non-blocking cleanup if no Storage object exists for this employee
+      }
     }
   },
 };

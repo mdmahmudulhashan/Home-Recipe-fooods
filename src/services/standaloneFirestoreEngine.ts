@@ -595,6 +595,10 @@ async function fetchFirestoreEmployees(
         finalSalarySettled: data.finalSalarySettled === true,
         settledAt: data.settledAt ? formatTimestamp(data.settledAt) : null,
         rehireHistory: data.rehireHistory || '[]',
+        photoStoragePath: data.photoStoragePath || '',
+        photoFileType: data.photoFileType || '',
+        photoOriginalSize: Number(data.photoOriginalSize || 0),
+        photoCompressedSize: Number(data.photoCompressedSize || 0),
         createdBy: data.createdBy || '',
         rawCreatedAt: data.createdAt,
         createdAt: formatTimestamp(data.createdAt),
@@ -1305,6 +1309,10 @@ export async function handleStandaloneApiRequest(
         monthlyBonus: Number(body.monthlyBonus || 0),
         currentAddress: String(body.currentAddress || ''),
         permanentAddress: String(body.permanentAddress || ''),
+        photoStoragePath: String(body.photoStoragePath || '').slice(0, 480),
+        photoFileType: String(body.photoFileType || '').slice(0, 60),
+        photoOriginalSize: Number(body.photoOriginalSize || 0),
+        photoCompressedSize: Number(body.photoCompressedSize || 0),
         createdBy: currentUser.uid,
         updatedBy: currentUser.uid,
         createdAt: serverTimestamp(),
@@ -1673,6 +1681,18 @@ export async function handleStandaloneApiRequest(
         monthlyBonus: Number(body.monthlyBonus ?? target.monthlyBonus ?? 0),
         currentAddress: String(body.currentAddress ?? target.currentAddress ?? ''),
         permanentAddress: String(body.permanentAddress ?? target.permanentAddress ?? ''),
+        photoStoragePath: String(
+          body.photoStoragePath ?? target.photoStoragePath ?? existingData.photoStoragePath ?? ''
+        ).slice(0, 480),
+        photoFileType: String(
+          body.photoFileType ?? target.photoFileType ?? existingData.photoFileType ?? ''
+        ).slice(0, 60),
+        photoOriginalSize: Number(
+          body.photoOriginalSize ?? target.photoOriginalSize ?? existingData.photoOriginalSize ?? 0
+        ),
+        photoCompressedSize: Number(
+          body.photoCompressedSize ?? target.photoCompressedSize ?? existingData.photoCompressedSize ?? 0
+        ),
         createdBy: existingData.createdBy || currentUser.uid,
         updatedBy: currentUser.uid,
         createdAt: existingData.createdAt || serverTimestamp(),
